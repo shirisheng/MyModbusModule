@@ -11,8 +11,8 @@ SerialPortHelper::SerialPortHelper(QWidget *parent) :
 {
     ui->setupUi(this);
     this->setWindowTitle("Serial Port Helper");
-    QObject::connect(&timer_, SIGNAL(timeout()), this, SLOT(recvFinish()));
-    QObject::connect(&currentSerialPort_, SIGNAL(readyRead()), this, SLOT(recvData()));
+//    QObject::connect(&timer_, SIGNAL(timeout()), this, SLOT(recvFinish()));
+//    QObject::connect(&currentSerialPort_, SIGNAL(readyRead()), this, SLOT(recvData()));
     QObject::connect(&currentSerialPort_, SIGNAL(bytesWritten(qint64)), this, SLOT(sendContinue(qint64)));
 }
 
@@ -46,21 +46,21 @@ void SerialPortHelper::showInCommBrowser(QString descr, QByteArray dataToShow)
     ui->commStatusBrowser->moveCursor(QTextCursor::End);
 }
 
-void SerialPortHelper::recvData()
-{
-    timer_.start(5);
-    QByteArray recvData = currentSerialPort_.readAll();
-    recvBuff_.append(recvData);
-}
+//void SerialPortHelper::recvData()
+//{
+//    timer_.start(5);
+//    QByteArray recvData = currentSerialPort_.readAll();
+//    recvBuff_.append(recvData);
+//}
 
-void SerialPortHelper::recvFinish()
-{
-    timer_.stop();
-    QString descr("接收内容:");
-    showInCommBrowser(descr,recvBuff_);
-    emit recvFinishSignal((quint8 *)recvBuff_.data(), recvBuff_.size());
-    recvBuff_.clear();
-}
+//void SerialPortHelper::recvFinish()
+//{
+//    timer_.stop();
+//    QString descr("接收内容:");
+//    showInCommBrowser(descr,recvBuff_);
+//    emit recvFinishSignal((quint8 *)recvBuff_.data(), recvBuff_.size());
+//    recvBuff_.clear();
+//}
 
 void SerialPortHelper::sendData(const QByteArray &data)
 {

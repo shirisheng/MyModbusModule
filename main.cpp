@@ -3,19 +3,17 @@
 #include "ModbusModule.h"
 #include "SerialPortHelper.h"
 
-#define RECV_BUFF1_LEN      100
-#define RECV_BUFF2_LEN      200
-
 SerialPortHelper* pSerialPort1;
 SerialPortHelper* pSerialPort2;
-Uint16 modbusTimer1;
-Uint16 modbusTimer2;
-Uint8 recvBuff1[RECV_BUFF1_LEN];
-Uint8 recvBuff2[RECV_BUFF2_LEN];
 /****************************此部分的函数由使用者自己实现****************************start*/
 void serialPortSender1(Uint8* pPackBuff, Uint16 packLen)
 {
     pSerialPort1->sendData(pPackBuff,packLen);
+}
+
+Int16 serialPortReceiver1(Uint8* pRecvBuff, Uint16 recvLen)
+{
+    return pSerialPort1->currentSerialPort()->read((char*)pRecvBuff,recvLen);
 }
 
 void dataHandler1(Uint16* pUnPackData, Uint16 dataLen)
@@ -31,6 +29,11 @@ void commErrorHandler1(void)
 void serialPortSender2(Uint8* pPackBuff, Uint16 packLen)
 {
     pSerialPort2->sendData(pPackBuff,packLen);
+}
+
+Int16 serialPortReceiver2(Uint8* pRecvBuff, Uint16 recvLen)
+{
+    return pSerialPort2->currentSerialPort()->read((char*)pRecvBuff,recvLen);
 }
 
 void dataHandler2(Uint16* pUnPackData, Uint16 dataLen)
@@ -51,11 +54,11 @@ int main(int argc, char *argv[])
     ModbusInitStruct initStruct;
     initStruct.timeOutTime = 50;
     initStruct.reSendTimes = 10;
-    initStruct.pRecvBuff = recvBuff1;
-    initStruct.recvBuffLen = RECV_BUFF1_LEN;
+    initStruct.recvBuffLen = 200;
     initStruct.packBuffLen = 100;
     initStruct.dataBuffLen = 100;
     initStruct.callBack.pDataSender = serialPortSender1;
+    initStruct.callBack.pDataReceiver = serialPortReceiver1;
     initStruct.callBack.pDataHandler = dataHandler1;
     initStruct.callBack.pCommErrorHandler = commErrorHandler1;
     ModbusModule modbusInstance1(initStruct);
@@ -63,11 +66,11 @@ int main(int argc, char *argv[])
 
     initStruct.timeOutTime = 50;
     initStruct.reSendTimes = 10;
-    initStruct.pRecvBuff = recvBuff2;
-    initStruct.recvBuffLen = RECV_BUFF2_LEN;
+    initStruct.recvBuffLen = 200;
     initStruct.packBuffLen = 200;
     initStruct.dataBuffLen = 200;
     initStruct.callBack.pDataSender = serialPortSender2;
+    initStruct.callBack.pDataReceiver = serialPortReceiver2;
     initStruct.callBack.pDataHandler = dataHandler2;
     initStruct.callBack.pCommErrorHandler = commErrorHandler2;
     ModbusModule modbusInstance2(initStruct);

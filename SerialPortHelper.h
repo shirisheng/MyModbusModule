@@ -30,17 +30,18 @@ public:
     }
     void showInCommBrowser(QString descr, QString strToShow);
     void showInCommBrowser(QString descr, QByteArray dataToShow);
+    QSerialPort * currentSerialPort(){return &currentSerialPort_;}
 
 signals:
     recvFinishSignal(Uint8* pRecvBuff, Uint16 buffLen);
 
 public slots:
-    void recvData();
+//    void recvData();
     void sendData(const QByteArray &data);
     void sendData(quint8* pPackBuff, quint16 packLen);
 
 private slots:
-    void recvFinish();
+//    void recvFinish();
     void sendContinue(qint64 writtenBytes);
 
 private slots:

@@ -1,20 +1,21 @@
 #ifndef MODBUSMODULE_H
 #define MODBUSMODULE_H
 
+#include <stdio.h>
+#include <stdint.h>
 #include <QMap>
 #include <QString>
 #include <QDebug>
 #include "qglobal.h"
 #include "SerialPortHelper.h"
 
-typedef quint8 Uint8;
-typedef quint16 Uint16;
+typedef int8_t   Int8;
+typedef int16_t  Int16;
+typedef uint8_t  Uint8;
+typedef uint16_t Uint16;
 
 /***************************************************MODBUS CONFIG*start*/
 #define TRF_ORDER             0     //传输顺序：0:高字节在前，1:低字节在前
-//#define PACK_BUFF_LEN        200
-//#define UNPACK_BUFF_LEN      200
-//#define UNPACK_DATA_LEN      200
 
 #if (TRF_ORDER == 0)
     #define HIGH_FIRST
@@ -62,6 +63,7 @@ enum MODBUS_ERROR
     Modbus_Error10,     //从机返回异常响应帧
     Modbus_Error11,     //功能码未实现
     Modbus_Error12,     //通信超时
+    Modbus_Error13,     //定时器无效
 };
 
 enum EXCEPT_CODE
@@ -245,6 +247,7 @@ typedef struct _ModbusUnPackStuct_
 {
     Uint8* pRecvBuff; //接收缓冲区
     Uint16 rBuffLen; //缓冲区长度
+    Uint16 recvLen; //接收数据长度
     Uint16* pDataBuff; //解包据数缓冲区
     Uint16 dBuffLen; //缓冲区长度
     Uint16 dataLen; //数据长度
@@ -258,24 +261,26 @@ typedef struct _ModbusRunInfo_
 } ModbusRunInfo;
 
 typedef void (*DataSender)(Uint8* pPackBuff, Uint16 packLen);
+typedef Int16 (*DataReceiver)(Uint8* pRecvBuff, Uint16 recvLen);
 typedef void (*DataHandler)(Uint16* pUnPackData, Uint16 dataLen);
 typedef void (*CommErrorHandler)(void);
 
 typedef struct _ModbusCallBackStruct_
 {
     DataSender pDataSender;
+    DataReceiver pDataReceiver;
     DataHandler pDataHandler;
     CommErrorHandler pCommErrorHandler;
 } ModbusCallBackStruct;
 
 typedef struct _ModbusInitStruct_
 {
-    Uint16 timeOutTime; //通信超时时间设定
+    Uint16* pMudbusTimer;
+    Uint16 timeOutTime; //通信超时时间
     Uint16 reSendTimes; //故障重发次数
-    Uint8* pRecvBuff; //接收缓冲区
     Uint16 recvBuffLen; //接收缓冲区长度
     Uint16 packBuffLen; //打包缓冲区长度
-    Uint16 dataBuffLen; //解包数据缓冲区长度
+    Uint16 dataBuffLen; //解包缓冲区长度
     ModbusCallBackStruct callBack;
 } ModbusInitStruct;
 /***********************************************MODBUS MODULE STRUCT*end*/
@@ -287,20 +292,23 @@ class ModbusModule : public QObject
 public:
     ModbusModule(ModbusInitStruct initStruct);
     ~ModbusModule();
-    Uint16 createCRC16(Uint8 *str,Uint16 num);
     bool readDataFromSlave(Uint8 slaveID, Uint16 startAddr, Uint16 dataNum);
     bool writeDataToSlave(Uint8 slaveID, Uint16 startAddr, Uint16 data);
     void clearErrAndSendNextPack();
     void modbusRunningController();
+
     Uint16 packBuffSize(){return packStuct_.pBuffLen;}
     Uint16 packBuffFront(){return packStuct_.buffFront;}
     Uint16 packBuffRear(){return packStuct_.buffRear;}
     void setSerialPort(SerialPortHelper* pSerialPort);
 
 public slots:
-    void notifyModbusRecvFinish(Uint8* pUPckBuff, Uint16 buffLen);
+    void timeOutHandler();
+//    void notifyModbusRecvFinish(Uint8* pUPckBuff, Uint16 buffLen);
 
 private:
+    Uint8 modbusHasInitCheck();
+    Uint16 createCRC16(Uint8 *str,Uint16 num);
     Uint8 insertElement(Uint8* pBuff, Uint16* pFront, Uint16* pRear, Uint8 data);
     Uint8 deleteElement(Uint8* pBuff, Uint16* pFront, Uint16* pRear, Uint8* pData);
     Uint8 insertPack(Uint8* pBuff, Uint16* pFront, Uint16* pRear, Uint8* pPackData, Uint16 dataLen);
@@ -311,12 +319,14 @@ private:
     bool toFunCode06CmdPackRTU(Uint8 slaveID, Uint16 startReg, Uint16 data);
     bool funCode06RspUnPackRTU();
     void exceptRspHander(Uint8* pUPkSrcBuff);
+    Uint8 addDataToRecvBuff(Uint8* pBuff, Uint16 len);
+    void captureRspFrameRTU();
     bool modbusRspUnPackRTU(Uint8* pUPkSrcBuff);
     void clearModbusError();
     void modbusErrorHandler();
 
 private:
-    Uint16 mudbusTimer_; //超时检测定时器
+    Uint16* pMudbusTimer_; //定时器
     Uint16 timeOutTime_; //通信超时时间
     Uint16 reSendTimes_; //故障重发次数
     Uint16 reSendCount_; //重发计数
@@ -324,8 +334,12 @@ private:
     ModbusUnPackStuct unPackStuct_;
     ModbusRunInfo runInfo_;
     ModbusCallBackStruct callBackStruct_;
+    ///////////////////////////////////////////
     QMap<int,QString> errorToDecrMap_;
     SerialPortHelper* pSerialPort_;
+    QTimer baseTimer_;
+    Uint16 mudbusTimer_;
+    ///////////////////////////////////////////
 };
 
 #endif // MODBUSMODULE_H

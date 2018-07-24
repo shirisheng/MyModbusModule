@@ -36,8 +36,6 @@ void MainWindow::runningModbus()
 
 void MainWindow::modbusTimerAdd()
 {
-    modbusTimer1++;
-    modbusTimer2++;
 }
 
 void MainWindow::refreshPackBuffInfo()
@@ -69,21 +67,24 @@ void MainWindow::on_startSendButton_clicked()
 
 void MainWindow::onSendCmd()
 {
+    bool convertOk;
     if(startSendCmd_)
     {
         if(!cmdSelect_)
         {
             pModbusInstance_->readDataFromSlave(ui->readSlaveIDLineEdit->text().toInt(),
-                              !sendMode_ ? ui->readStartAddrLineEdit->text().toInt() : continueSendAddr_,
+                              !sendMode_ ? ui->readStartAddrLineEdit->text().toInt(&convertOk,16) : continueSendAddr_,
                               ui->readDataNumLineEdit->text().toInt());
-            continueSendAddr_ < 200 ? continueSendAddr_++ : continueSendAddr_ = ui->readStartAddrLineEdit->text().toInt();
+            continueSendAddr_ < ui->endAddrLineEdit->text().toInt(&convertOk,16) ?
+                        continueSendAddr_++ : continueSendAddr_ = ui->readStartAddrLineEdit->text().toInt(&convertOk,16);
         }
         else
         {
             pModbusInstance_->writeDataToSlave(ui->writeSlaveIDLineEdit->text().toInt(),
-                             !sendMode_ ? ui->writeAddrLineEdit->text().toInt() : continueSendAddr_,
-                             !sendMode_ ? ui->writeValueLineEdit->text().toInt() : continueSendAddr_ + ui->writeValueLineEdit->text().toInt());
-            continueSendAddr_ < 200 ? continueSendAddr_++ : continueSendAddr_ = ui->writeAddrLineEdit->text().toInt();
+                             !sendMode_ ? ui->writeAddrLineEdit->text().toInt(&convertOk,16) : continueSendAddr_,
+                             ui->writeValueLineEdit->text().toInt());
+            continueSendAddr_ < ui->endAddrLineEdit->text().toInt(&convertOk,16) ?
+                        continueSendAddr_++ : continueSendAddr_ = ui->writeAddrLineEdit->text().toInt(&convertOk,16);
         }
         if(!sendMode_) ui->startSendButton->click();
     }

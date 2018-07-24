@@ -38,7 +38,6 @@ const Uint16 crctable[] =
 };
 
 ModbusModule::ModbusModule(ModbusInitStruct initStruct):
-    reSendTimes_(10),
     reSendCount_(0),
     mudbusTimer_(0)
 {
@@ -46,14 +45,19 @@ ModbusModule::ModbusModule(ModbusInitStruct initStruct):
     this->packStuct_.buffFront = 0;
     this->packStuct_.buffRear = 0;
     this->unPackStuct_.dataLen = 0;
+    this->unPackStuct_.recvLen = 0;
+    this->pMudbusTimer_ = &mudbusTimer_;
+//    this->pMudbusTimer_ = initStruct.pMudbusTimer;
     this->timeOutTime_ = initStruct.timeOutTime;
+    this->reSendTimes_ = initStruct.reSendTimes;
     this->clearModbusError();
     this->packStuct_.pPackBuff = new Uint8[initStruct.packBuffLen];
     this->packStuct_.pBuffLen = initStruct.packBuffLen;
-    this->unPackStuct_.pRecvBuff = initStruct.pRecvBuff;
+    this->unPackStuct_.pRecvBuff = new Uint8[initStruct.recvBuffLen];
     this->unPackStuct_.rBuffLen = initStruct.recvBuffLen;
     this->unPackStuct_.pDataBuff = new Uint16[initStruct.dataBuffLen];
     this->callBackStruct_.pDataSender = initStruct.callBack.pDataSender;
+    this->callBackStruct_.pDataReceiver = initStruct.callBack.pDataReceiver;
     this->callBackStruct_.pDataHandler = initStruct.callBack.pDataHandler;
     this->callBackStruct_.pCommErrorHandler = initStruct.callBack.pCommErrorHandler;
     errorToDecrMap_.insert(Modbus_Error1, "从机地址错误");
@@ -68,19 +72,23 @@ ModbusModule::ModbusModule(ModbusInitStruct initStruct):
     errorToDecrMap_.insert(Modbus_Error10,"从机返回异常响应帧");
     errorToDecrMap_.insert(Modbus_Error11,"功能码未实现");
     errorToDecrMap_.insert(Modbus_Error12,"通信超时");
+    errorToDecrMap_.insert(Modbus_Error13,"定时器无效");
+    QObject::connect(&baseTimer_, SIGNAL(timeout()), this, SLOT(timeOutHandler()));
+    baseTimer_.start(1);
 }
 
 ModbusModule::~ModbusModule()
 {
     delete[] packStuct_.pPackBuff;
+    delete[] unPackStuct_.pRecvBuff;
     delete[] unPackStuct_.pDataBuff;
 }
 
 void ModbusModule::setSerialPort(SerialPortHelper* pSerialPort)
 {
     pSerialPort_ = pSerialPort;
-    QObject::connect(pSerialPort_, SIGNAL(recvFinishSignal(Uint8*, Uint16)),
-                     this, SLOT(notifyModbusRecvFinish(Uint8*, Uint16)));
+//    QObject::connect(pSerialPort_, SIGNAL(recvFinishSignal(Uint8*, Uint16)),
+//                     this, SLOT(notifyModbusRecvFinish(Uint8*, Uint16)));
 }
 
 Uint16 ModbusModule::createCRC16(Uint8 *str,Uint16 num)
@@ -98,6 +106,31 @@ Uint16 ModbusModule::createCRC16(Uint8 *str,Uint16 num)
         crc = crc ^ crctable_temp[arc];
     }
     return(crc);
+}
+
+Uint8 ModbusModule::modbusHasInitCheck()
+{
+    if(this->pMudbusTimer_ == NULL)
+    {
+        this->runInfo_.error = Modbus_Error13;
+        return 0;
+    }
+    else if(this->packStuct_.pPackBuff == NULL)
+    {
+        this->runInfo_.error = Modbus_Error6;
+        return 0;
+    }
+    else if(this->unPackStuct_.pRecvBuff == NULL)
+    {
+        this->runInfo_.error = Modbus_Error8;
+        return 0;
+    }
+    else if(this->unPackStuct_.pDataBuff == NULL)
+    {
+        this->runInfo_.error = Modbus_Error4;
+        return 0;
+    }
+    return 1;
 }
 
 Uint8 ModbusModule::insertElement(Uint8* pBuff, Uint16* pFront, Uint16* pRear, Uint8 data)
@@ -175,9 +208,9 @@ bool ModbusModule::toFunCode03CmdPackRTU(Uint8 slaveID, Uint16 startReg,  Uint16
     pFrame = (ReadMulRegCMD_X03 *)packBuff;
     pFrame->slaveID = slaveID;
     pFrame->funCode = READ_MUL_HLD_REG;
-    pFrame->startRegH = (startReg << 8);
+    pFrame->startRegH = (startReg >> 8);
     pFrame->startRegL = startReg & 0x0FF;
-    pFrame->regNumH = (regNum << 8);
+    pFrame->regNumH = (regNum >> 8);
     pFrame->regNumL = regNum & 0x0FF;
     crc16 = createCRC16(packBuff, sizeof(ReadMulRegCMD_X03) - 2);
     pFrame->crcH = (crc16 >> 8);
@@ -269,7 +302,7 @@ bool ModbusModule::toFunCode06CmdPackRTU(Uint8 slaveID, Uint16 startReg, Uint16 
     pFrame = (WriteMulRegCMD_X06 *)packBuff;
     pFrame->slaveID = slaveID;
     pFrame->funCode = WRITE_ONE_HLD_REG;
-    pFrame->startRegH = (startReg << 8);
+    pFrame->startRegH = (startReg >> 8);
     pFrame->startRegL = startReg & 0x0FF;
     pFrame->dataH = (data >> 8);
     pFrame->dataL = data & 0x0FF;
@@ -377,18 +410,70 @@ bool ModbusModule::writeDataToSlave(Uint8 slaveID, Uint16 startAddr, Uint16 data
     return toFunCode06CmdPackRTU(slaveID, startAddr, data);
 }
 
-void ModbusModule::notifyModbusRecvFinish(Uint8* pRecvBuff, Uint16 buffLen)
+void ModbusModule::timeOutHandler()
 {
-    Uint16 i = 0;
-    if(buffLen < this->unPackStuct_.rBuffLen)
-    {
-        for(i = 0; i < buffLen; i++)
-            this->unPackStuct_.pRecvBuff[i] = pRecvBuff[i];
-        this->runInfo_.status = RECV_FINISH;
-    }
-    else
+    this->mudbusTimer_++;
+}
+
+//void ModbusModule::notifyModbusRecvFinish(Uint8* pRecvBuff, Uint16 buffLen)
+//{
+//    Uint16 i = 0;
+//    if(buffLen < this->unPackStuct_.rBuffLen)
+//    {
+//        for(i = 0; i < buffLen; i++)
+//            this->unPackStuct_.pRecvBuff[i] = pRecvBuff[i];
+//        this->runInfo_.status = RECV_FINISH;
+//    }
+//    else
+//    {
+//        this->runInfo_.error = Modbus_Error9;
+//    }
+//}
+
+Uint8 ModbusModule::addDataToRecvBuff(Uint8* pBuff, Uint16 len)
+{
+    Uint16 i = 0, recvLenTmp;
+    recvLenTmp = this->unPackStuct_.recvLen;
+    if(recvLenTmp + len > this->unPackStuct_.rBuffLen)
     {
         this->runInfo_.error = Modbus_Error9;
+        return 0;
+    }
+    for(i = 0; i < len; i++)
+    {
+        this->unPackStuct_.pRecvBuff[recvLenTmp + i] = pBuff[i];
+    }
+    this->unPackStuct_.recvLen += len;
+    return 1;
+}
+
+void ModbusModule::captureRspFrameRTU()
+{
+    Int16 bytes = 0;
+    Uint8 tmpBuff[10];
+    static Uint8 recvCtrl = 0;
+    bytes = this->callBackStruct_.pDataReceiver(tmpBuff, 8);
+    if(bytes > 0) this->addDataToRecvBuff(tmpBuff, bytes);
+    switch(recvCtrl)
+    {
+    case 0: //超时检测
+        if(bytes <= 0)
+        {
+            if(*(this->pMudbusTimer_) > this->timeOutTime_)
+                this->runInfo_.error = Modbus_Error12;
+        }
+        else {recvCtrl = 1; *(this->pMudbusTimer_) = 0;}
+        break;
+    case 1: //帧结束检测
+        if(bytes <= 0 && *(this->pMudbusTimer_) > 5)
+        {
+            pSerialPort_->showInCommBrowser(QString("接收内容:"),
+                          QByteArray((char *)this->unPackStuct_.pRecvBuff, this->unPackStuct_.recvLen));
+            recvCtrl = 0; this->runInfo_.status = RECV_FINISH;
+        }
+        break;
+    default:
+        break;
     }
 }
 
@@ -397,7 +482,7 @@ void ModbusModule::clearErrAndSendNextPack()
     if(this->runInfo_.status == ERROR_STATUS)
     {
         this->runInfo_.status = IDLE_STATUS;
-        this->mudbusTimer_ = 0;
+        *(this->pMudbusTimer_) = 0;
         this->reSendCount_ = 0;
         this->runInfo_.error = 0;
         this->runInfo_.exceptCode = 0;
@@ -409,7 +494,6 @@ void ModbusModule::clearErrAndSendNextPack()
 
 void ModbusModule::clearModbusError()
 {
-    this->mudbusTimer_ = 0;
     this->reSendCount_ = 0;
     this->runInfo_.error = 0;
     this->runInfo_.exceptCode = 0;
@@ -438,13 +522,10 @@ void ModbusModule::modbusRunningController()
 {
     Uint16 dataLen, front, rear;
     Uint8 ret, pPackData[50]; //数据包发送临时缓冲区
+    modbusHasInitCheck();
+    modbusErrorHandler();
     front = this->packStuct_.buffFront;
     rear = this->packStuct_.buffRear;
-    if(this->runInfo_.status == ERROR_STATUS)
-        return;
-    modbusErrorHandler();
-    if(this->runInfo_.status != RECV_STATUS)
-        this->mudbusTimer_ = 0; // ms/1
     switch (this->runInfo_.status)
     {
     case IDLE_STATUS:
@@ -457,15 +538,14 @@ void ModbusModule::modbusRunningController()
             if(ret == 1)
             {
                 this->callBackStruct_.pDataSender(pPackData, dataLen);
+                *(this->pMudbusTimer_ )= 0;
+                this->unPackStuct_.recvLen = 0;
                 this->runInfo_.status = RECV_STATUS;
             }
             else this->runInfo_.status = IDLE_STATUS;
         break;
     case RECV_STATUS:
-        if(this->mudbusTimer_++ > timeOutTime_) //通信超时
-        { //超时重发
-            this->runInfo_.error = Modbus_Error12;
-        }
+        captureRspFrameRTU();
         break;
     case RECV_FINISH:
         if(modbusRspUnPackRTU(this->unPackStuct_.pRecvBuff))
