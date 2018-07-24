@@ -37,8 +37,8 @@ signals:
 
 public slots:
 //    void recvData();
-    void sendData(const QByteArray &data);
-    void sendData(quint8* pPackBuff, quint16 packLen);
+    qint64 sendData(const QByteArray &data);
+    qint64 sendData(quint8* pPackBuff, quint16 packLen);
 
 private slots:
 //    void recvFinish();

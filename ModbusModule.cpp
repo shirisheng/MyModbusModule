@@ -447,10 +447,35 @@ Uint8 ModbusModule::addDataToRecvBuff(Uint8* pBuff, Uint16 len)
     return 1;
 }
 
-void ModbusModule::captureRspFrameRTU()
+Uint8 ModbusModule::sendCurrCmdPackRTU()
+{
+    static Uint16 bytesWr = 0;
+    Uint16 dataLen, front, rear;
+    Uint8 ret, pPackData[50]; //数据包发送临时缓冲区
+    front = this->packStuct_.buffFront;
+    rear = this->packStuct_.buffRear;
+    ret = getCurrPack(this->packStuct_.pPackBuff,
+                      &front, &rear, pPackData, &dataLen);
+    if(ret != 1)
+    {
+        bytesWr = 0;
+        return 0;
+    }
+    bytesWr += this->callBackStruct_.pDataSender(pPackData + bytesWr, dataLen);
+    if(bytesWr >= dataLen)
+    {
+        *(this->pMudbusTimer_ )= 0;
+        this->unPackStuct_.recvLen = 0;
+        bytesWr = 0; ret = 2; //发送完成
+    }
+    else ret = 1;
+    return ret;
+}
+
+Uint8 ModbusModule::captureRspPackRTU()
 {
     Int16 bytes = 0;
-    Uint8 tmpBuff[10];
+    Uint8 ret = 0, tmpBuff[10];
     static Uint8 recvCtrl = 0;
     bytes = this->callBackStruct_.pDataReceiver(tmpBuff, 8);
     if(bytes > 0) this->addDataToRecvBuff(tmpBuff, bytes);
@@ -467,14 +492,15 @@ void ModbusModule::captureRspFrameRTU()
     case 1: //帧结束检测
         if(bytes <= 0 && *(this->pMudbusTimer_) > 5)
         {
+            recvCtrl = 0; ret = 1;
             pSerialPort_->showInCommBrowser(QString("接收内容:"),
                           QByteArray((char *)this->unPackStuct_.pRecvBuff, this->unPackStuct_.recvLen));
-            recvCtrl = 0; this->runInfo_.status = RECV_FINISH;
         }
         break;
     default:
         break;
     }
+    return ret;
 }
 
 void ModbusModule::clearErrAndSendNextPack()
@@ -520,8 +546,8 @@ void ModbusModule::modbusErrorHandler()
 
 void ModbusModule::modbusRunningController()
 {
-    Uint16 dataLen, front, rear;
-    Uint8 ret, pPackData[50]; //数据包发送临时缓冲区
+    Uint8 ret = 0;
+    Uint16 front, rear;
     modbusHasInitCheck();
     modbusErrorHandler();
     front = this->packStuct_.buffFront;
@@ -533,19 +559,17 @@ void ModbusModule::modbusRunningController()
             this->runInfo_.status = SEND_STATUS;
         break;
     case SEND_STATUS:
-            ret = getCurrPack(this->packStuct_.pPackBuff,
-                                      &front, &rear, pPackData, &dataLen);
-            if(ret == 1)
-            {
-                this->callBackStruct_.pDataSender(pPackData, dataLen);
-                *(this->pMudbusTimer_ )= 0;
-                this->unPackStuct_.recvLen = 0;
-                this->runInfo_.status = RECV_STATUS;
-            }
-            else this->runInfo_.status = IDLE_STATUS;
+        ret = sendCurrCmdPackRTU();
+        if(ret == 0)
+            this->runInfo_.status = IDLE_STATUS;
+        else if(ret == 1)
+            this->runInfo_.status = SEND_STATUS;
+        else if(ret == 2)
+            this->runInfo_.status = RECV_STATUS;
         break;
     case RECV_STATUS:
-        captureRspFrameRTU();
+        if(captureRspPackRTU())
+            this->runInfo_.status = RECV_FINISH;
         break;
     case RECV_FINISH:
         if(modbusRspUnPackRTU(this->unPackStuct_.pRecvBuff))
@@ -554,10 +578,10 @@ void ModbusModule::modbusRunningController()
             this->runInfo_.status = IDLE_STATUS;
             deleteCurrPack(this->packStuct_.pPackBuff, &front, &rear);
             this->packStuct_.buffFront = front; //当前帧出队，继续发下一帧
+            this->callBackStruct_.pDataHandler(this->unPackStuct_.pDataBuff,
+                                               this->unPackStuct_.dataLen);
             pSerialPort_->showInCommBrowser(QString("解析结果:"),
                           QByteArray((char *)this->unPackStuct_.pDataBuff, this->unPackStuct_.dataLen));
-            this->callBackStruct_.pDataHandler(this->unPackStuct_.pDataBuff,
-                                                     this->unPackStuct_.dataLen);
         }
         break;
     case ERROR_STATUS:

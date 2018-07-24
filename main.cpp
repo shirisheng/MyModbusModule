@@ -6,9 +6,9 @@
 SerialPortHelper* pSerialPort1;
 SerialPortHelper* pSerialPort2;
 /****************************此部分的函数由使用者自己实现****************************start*/
-void serialPortSender1(Uint8* pPackBuff, Uint16 packLen)
+Int16 serialPortSender1(Uint8* pPackBuff, Uint16 packLen)
 {
-    pSerialPort1->sendData(pPackBuff,packLen);
+    return pSerialPort1->sendData(pPackBuff,packLen);
 }
 
 Int16 serialPortReceiver1(Uint8* pRecvBuff, Uint16 recvLen)
@@ -26,9 +26,9 @@ void commErrorHandler1(void)
     pSerialPort1->showInCommBrowser(QString("回调 : void commErrorHandler(void)"),QString(""));
 }
 
-void serialPortSender2(Uint8* pPackBuff, Uint16 packLen)
+Int16 serialPortSender2(Uint8* pPackBuff, Uint16 packLen)
 {
-    pSerialPort2->sendData(pPackBuff,packLen);
+    return pSerialPort2->sendData(pPackBuff,packLen);
 }
 
 Int16 serialPortReceiver2(Uint8* pRecvBuff, Uint16 recvLen)

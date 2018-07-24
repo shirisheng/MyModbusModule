@@ -62,17 +62,18 @@ void SerialPortHelper::showInCommBrowser(QString descr, QByteArray dataToShow)
 //    recvBuff_.clear();
 //}
 
-void SerialPortHelper::sendData(const QByteArray &data)
+qint64 SerialPortHelper::sendData(const QByteArray &data)
 {
     this->sendBuff_.append(data);
     qint64 bytes = currentSerialPort_.write(sendBuff_);
     this->sendBuff_.remove(0,bytes);
     showInCommBrowser(QString("发送内容:"),data);
+    return bytes;
 }
 
-void SerialPortHelper::sendData(quint8* pPackBuff, quint16 packLen)
+qint64 SerialPortHelper::sendData(quint8* pPackBuff, quint16 packLen)
 {
-    sendData(QByteArray((char*)pPackBuff, packLen));
+    return sendData(QByteArray((char*)pPackBuff, packLen));
 }
 
 void SerialPortHelper::sendContinue(qint64 writtenBytes)

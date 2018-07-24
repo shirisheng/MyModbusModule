@@ -260,7 +260,7 @@ typedef struct _ModbusRunInfo_
     Uint8 error;      //错误类型
 } ModbusRunInfo;
 
-typedef void (*DataSender)(Uint8* pPackBuff, Uint16 packLen);
+typedef Int16 (*DataSender)(Uint8* pPackBuff, Uint16 packLen);
 typedef Int16 (*DataReceiver)(Uint8* pRecvBuff, Uint16 recvLen);
 typedef void (*DataHandler)(Uint16* pUnPackData, Uint16 dataLen);
 typedef void (*CommErrorHandler)(void);
@@ -320,7 +320,8 @@ private:
     bool funCode06RspUnPackRTU();
     void exceptRspHander(Uint8* pUPkSrcBuff);
     Uint8 addDataToRecvBuff(Uint8* pBuff, Uint16 len);
-    void captureRspFrameRTU();
+    Uint8 sendCurrCmdPackRTU();
+    Uint8 captureRspPackRTU();
     bool modbusRspUnPackRTU(Uint8* pUPkSrcBuff);
     void clearModbusError();
     void modbusErrorHandler();
