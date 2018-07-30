@@ -1,13 +1,17 @@
 #ifndef MODBUSMODULE_H
 #define MODBUSMODULE_H
 
+#define DEBUG_CODE
 #include <stdio.h>
 #include <stdint.h>
+
+#ifdef DEBUG_CODE
 #include <QMap>
 #include <QString>
 #include <QDebug>
 #include "qglobal.h"
 #include "SerialPortHelper.h"
+#endif
 
 /**********MODBUS CONFIG*********start*/
 /*传输顺序：0:高字节在前，1:低字节在前*/
@@ -279,9 +283,14 @@ typedef struct _ModbusInitStruct_
 /**********MODBUS STRUCT***********end*/
 
 
-class ModbusModule : public QObject
+class ModbusModule
+#ifdef DEBUG_CODE
+    : public QObject
+#endif
 {
+#ifdef DEBUG_CODE
     Q_OBJECT
+#endif
 public:
     ModbusModule(ModbusInitStruct initStruct);
     ~ModbusModule();
@@ -291,7 +300,7 @@ public:
     void clearModbusError();
     /*该函数须需要循环调用，以使Modbus处于工作状态*/
     void runningModbus();
-    ///////////////////////////////////////////////////////---
+#ifdef DEBUG_CODE
     Uint16 errorTimes(){return this->runInfo_.errTimes;}
     Uint16 packBuffSize(){return packStuct_.pBuffLen;}
     Uint16 packBuffFront(){return packStuct_.buffFront;}
@@ -299,7 +308,7 @@ public:
     void setSerialPort(SerialPortHelper* pSerialPort);
 public slots:
     void timeOutHandler();
-    ///////////////////////////////////////////////////////---
+#endif
 
 private:
     Uint8 modbusInitCheck();
@@ -332,12 +341,12 @@ private:
     ModbusUnPackStuct unPackStuct_;
     ModbusRunInfo runInfo_;
     ModbusCallBack callBack_;
-    ///////////////////////////////////////////////////////---
+#ifdef DEBUG_CODE
     QMap<int,QString> errorToDecrMap_;
     SerialPortHelper* pSerialPort_;
     QTimer baseTimer_;
     Uint16 mudbusTimer_;
-    ///////////////////////////////////////////////////////---
+#endif
 };
 
 class HC_HydServoCtrl

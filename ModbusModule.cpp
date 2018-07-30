@@ -1,6 +1,8 @@
 #include "ModbusModule.h"
+#ifdef DEBUG_CODE
 //#include "debug.h"
 #include "SerialPortHelper.h"
+#endif
 
 const Uint16 crctable[] =
 {
@@ -40,8 +42,10 @@ const Uint16 crctable[] =
 
 ModbusModule::ModbusModule(ModbusInitStruct initStruct):
     heartTimer_(0),
-    reSendCount_(0),
-    mudbusTimer_(0)
+    reSendCount_(0)
+#ifdef DEBUG_CODE
+   ,mudbusTimer_(0)
+#endif
 {
     this->runInfo_.status = IDLE_STATUS;
     this->runInfo_.exceptCode = 0;
@@ -52,8 +56,11 @@ ModbusModule::ModbusModule(ModbusInitStruct initStruct):
     this->unPackStuct_.recvLen = 0;
     this->unPackStuct_.dataLen = 0;
     this->unPackStuct_.pDataArea = NULL;
-    this->pMudbusTimer_ = &mudbusTimer_;////////---
-//    this->pMudbusTimer_ = initStruct.pMudbusTimer;
+#ifdef DEBUG_CODE
+    this->pMudbusTimer_ = &mudbusTimer_;
+#else
+    this->pMudbusTimer_ = initStruct.pMudbusTimer;
+#endif
     this->timeOutTime_ = initStruct.timeOutTime;
     this->reSendTimes_ = initStruct.reSendTimes;
     this->packStuct_.pBuffLen = initStruct.packBuffLen;
@@ -64,7 +71,7 @@ ModbusModule::ModbusModule(ModbusInitStruct initStruct):
     this->callBack_.pReadData = initStruct.callBack.pReadData;
     this->callBack_.pDataHandler = initStruct.callBack.pDataHandler;
     this->callBack_.pErrorHandler = initStruct.callBack.pErrorHandler;
-    ///////////////////////////////////////////////////////////////---
+#ifdef DEBUG_CODE
     errorToDecrMap_.insert(Modbus_Error1, "打包缓冲区无效");
     errorToDecrMap_.insert(Modbus_Error2, "打包缓冲区空间不足");
     errorToDecrMap_.insert(Modbus_Error3, "接收缓冲区无效");
@@ -72,10 +79,10 @@ ModbusModule::ModbusModule(ModbusInitStruct initStruct):
     errorToDecrMap_.insert(Modbus_Error5, "定时器无效");
     errorToDecrMap_.insert(Modbus_Error6, "CRC校验错误");
     errorToDecrMap_.insert(Modbus_Error7, "从机返回异常响应帧");
-    errorToDecrMap_.insert(Modbus_Error8,"通信超时");
+    errorToDecrMap_.insert(Modbus_Error8, "通信超时");
     QObject::connect(&baseTimer_, SIGNAL(timeout()), this, SLOT(timeOutHandler()));
     baseTimer_.start(1);
-    ///////////////////////////////////////////////////////////////---
+#endif
 }
 
 ModbusModule::~ModbusModule()
@@ -84,12 +91,19 @@ ModbusModule::~ModbusModule()
     delete[] unPackStuct_.pRecvBuff;
 }
 
+#ifdef DEBUG_CODE
 void ModbusModule::setSerialPort(SerialPortHelper* pSerialPort)
 {
     pSerialPort_ = pSerialPort;
 //    QObject::connect(pSerialPort_, SIGNAL(recvFinishSignal(Uint8*, Uint16)),
 //                     this, SLOT(notifyModbusRecvFinish(Uint8*, Uint16)));
 }
+
+void ModbusModule::timeOutHandler()
+{
+    this->mudbusTimer_++;
+}
+#endif
 
 Uint16 ModbusModule::createCRC16(Uint8 *str,Uint16 num)
 {
@@ -283,11 +297,6 @@ Uint8 ModbusModule::writeDataToSlave(Uint8 slaveID, Uint16 addr, Uint16 data)
     return toFunCode06CmdPackRTU(slaveID, addr, data);
 }
 
-void ModbusModule::timeOutHandler()
-{
-    this->mudbusTimer_++;
-}
-
 Uint8 ModbusModule::addDataToRecvBuff(Uint8* pBuff, Uint16 len)
 {
     Uint16 i = 0, recvLenTmp;
@@ -325,6 +334,7 @@ Uint8 ModbusModule::sendCurrCmdPackRTU()
             this->unPackStuct_.recvLen = 0;
         }
     }
+#ifdef DEBUG_CODE
     if(retVal == 2)
     {
         pSerialPort_->showInCommBrowser(QString("Error Times: "),
@@ -340,6 +350,7 @@ Uint8 ModbusModule::sendCurrCmdPackRTU()
 //        }
 //        debug("\n\n\n");
     }
+#endif
     return retVal;
 }
 
@@ -442,6 +453,7 @@ Uint8 ModbusModule::receiveRspPackRTU()
         recvStep = 1;
         break;
     }
+#ifdef DEBUG_CODE
     if(recvOk == 1)
     {
         pSerialPort_->showInCommBrowser(QString("接收内容:"),
@@ -454,6 +466,7 @@ Uint8 ModbusModule::receiveRspPackRTU()
 //        }
 //        debug("\n\n\n");
     }
+#endif
     return recvOk;
 }
 
@@ -503,6 +516,7 @@ Uint8 ModbusModule::handleRspPackRTU()
     }
     if(this->unPackStuct_.dataLen > 0)
     {
+#ifdef DEBUG_CODE
         pSerialPort_->showInCommBrowser(QString("解析结果:"),
                       QByteArray((char *)this->unPackStuct_.pDataArea, this->unPackStuct_.dataLen*2));
 //        debug("解析结果:");
@@ -512,6 +526,7 @@ Uint8 ModbusModule::handleRspPackRTU()
 //            debug("%d ",this->unPackStuct_.pDataArea[i]);
 //        }
 //        debug("\n\n\n");
+#endif
         this->callBack_.pDataHandler(this->unPackStuct_.pDataArea,
                                      this->unPackStuct_.dataLen);
     }
@@ -562,6 +577,7 @@ void ModbusModule::modbusErrorHandler()
     }
     else
         this->runInfo_.status = ERROR_STATUS;
+#ifdef DEBUG_CODE
     if(this->runInfo_.error != Modbus_Error0)
     {
         pSerialPort_->showInCommBrowser(QString("Error: ").append(QString::number(this->runInfo_.error)),
@@ -569,6 +585,7 @@ void ModbusModule::modbusErrorHandler()
 //        debug("Error: %d", this->runInfo_.error);
 //        debug("\n\n\n");
     }
+#endif
 }
 
 void ModbusModule::runningModbus()
