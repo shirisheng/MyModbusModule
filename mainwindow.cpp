@@ -31,7 +31,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::runningModbus()
 {
-    pModbusInstance_->modbusRunningController();
+    pModbusInstance_->runningModbus();
 }
 
 void MainWindow::modbusTimerAdd()
@@ -47,7 +47,7 @@ void MainWindow::refreshPackBuffInfo()
 
 void MainWindow::on_clearErrorButton_clicked()
 {
-    pModbusInstance_->clearErrAndSendNextPack();
+    pModbusInstance_->clearModbusError();
 }
 
 void MainWindow::on_startSendButton_clicked()
