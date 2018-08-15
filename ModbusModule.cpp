@@ -147,7 +147,7 @@ Uint8 ModbusModule::insertElement(Uint8* pBuff, Uint16* pFront, Uint16* pRear, U
     if((*pRear + 1) % this->packStuct_.pBuffLen == *pFront)
         return 0; //队列已满时,不执行入队操作
     pBuff[*pRear] = data;
-    /*尾指针指向下一个位置*/
+    //尾指针指向下一个位置
     *pRear = (*pRear + 1) % this->packStuct_.pBuffLen;
     return 1;
 }
@@ -169,13 +169,13 @@ Uint8 ModbusModule::insertPack(Uint8* pBuff, Uint16* pFront, Uint16* pRear,
     Uint16 rear = *pRear;
     if(pBuff == NULL)
         return 0;
-    /*插入包长度*/
+    //插入包长度
     if(!insertElement(pBuff,&front,&rear,dataLen >> 8))
         return 0;
-    /*插入包长度*/
+    //插入包长度
     if(!insertElement(pBuff,&front,&rear,dataLen & 0x0FF))
         return 0;
-    /*插入包内容*/
+    //插入包内容
     for(i = 0; i < dataLen; i++)
         if(!insertElement(pBuff,&front,&rear,pPackData[i]))
             return 0;
@@ -329,7 +329,7 @@ Uint8 ModbusModule::sendCurrCmdPackRTU()
                 pWriteData(pPackData + bytesWr, dataLen);
         if(bytesWr >= dataLen)
         {
-            retVal = 2; //发送完成
+            retVal = 2; ///< 发送完成
             bytesWr = 0;
             this->unPackStuct_.recvLen = 0;
         }
@@ -470,6 +470,25 @@ Uint8 ModbusModule::receiveRspPackRTU()
     return recvOk;
 }
 
+Uint16 ModbusModule::getDataDescr()
+{
+    Uint16 dataDescr, dataLen;
+    Uint8 retVal, pPackData[50];
+    retVal = getCurrPack(this->packStuct_.pPackBuff,
+                       &(this->packStuct_.buffFront),
+                       &(this->packStuct_.buffRear),
+                       pPackData, &dataLen);
+    if(retVal == 0) return -1;
+#if   (TRF_ORDER == 0)
+    dataDescr = pPackData[2] << 8;
+    dataDescr |= pPackData[3] & 0x0FF;
+#elif (TRF_ORDER == 1)
+    dataDescr = pPackData[3] << 8;
+    dataDescr |= pPackData[2] & 0x0FF;
+#endif
+    return dataDescr;
+}
+
 Uint8 ModbusModule::handleRspPackRTU()
 {
     Uint16 crc16, crc16Recv;
@@ -509,6 +528,7 @@ Uint8 ModbusModule::handleRspPackRTU()
         }
         this->unPackStuct_.dataLen = rspDataLen/2;
         this->unPackStuct_.pDataArea = pDataAreaTmp;
+        this->unPackStuct_.dataDecr = getDataDescr();
         break;
     case WRITE_ONE_HLD_REG:
         break;
@@ -528,7 +548,8 @@ Uint8 ModbusModule::handleRspPackRTU()
 //        debug("\n\n\n");
 #endif
         this->callBack_.pDataHandler(this->unPackStuct_.pDataArea,
-                                     this->unPackStuct_.dataLen);
+                                     this->unPackStuct_.dataLen,
+                                     this->unPackStuct_.dataDecr);
     }
     return 1;
 }
@@ -631,7 +652,7 @@ void ModbusModule::runningModbus()
     case ERROR_STATUS:
         if(this->runInfo_.error != Modbus_Error0)
             this->callBack_.pErrorHandler();
-        /*清除错误，防止pCommErrorHandler反复调用*/
+        //清除错误，防止pCommErrorHandler反复调用
         this->runInfo_.error = Modbus_Error0;
         break;
     default:

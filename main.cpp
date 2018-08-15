@@ -16,7 +16,7 @@ Sint16 serial1Read(Uint8* pRecvBuff, Uint16 recvLen)
     return pSerialPort1->currentSerialPort()->read((char*)pRecvBuff,recvLen);
 }
 
-void dataHandler1(Uint16* pUnPackData, Uint16 dataLen)
+void dataHandler1(Uint16* pUnPackData, Uint16 dataLen, Uint16 descr)
 {
     pSerialPort1->showInCommBrowser(QString("回调 : void dataHandler(Uint16* pUnPackData, Uint16 dataLen)"),QString(""));
 }
@@ -36,7 +36,7 @@ Sint16 serial2Read(Uint8* pRecvBuff, Uint16 recvLen)
     return pSerialPort2->currentSerialPort()->read((char*)pRecvBuff,recvLen);
 }
 
-void dataHandler2(Uint16* pUnPackData, Uint16 dataLen)
+void dataHandler2(Uint16* pUnPackData, Uint16 dataLen, Uint16 descr)
 {
     pSerialPort2->showInCommBrowser(QString("回调 : void dataHandler(Uint16* pUnPackData, Uint16 dataLen)"),QString(""));
 }
