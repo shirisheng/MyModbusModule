@@ -1,10 +1,9 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include "ModbusModule.h"
 
 extern Uint16 modbusTimer1;
 extern Uint16 modbusTimer2;
-MainWindow::MainWindow(ModbusModule* pModbusInstance, QWidget *parent) :
+MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
@@ -13,13 +12,12 @@ MainWindow::MainWindow(ModbusModule* pModbusInstance, QWidget *parent) :
     sendMode_ = false;
     startSendCmd_ = false;
     continueSendAddr_ = 0;
-    pModbusInstance_ = pModbusInstance;
+    pModbusMaster_ = NULL;
+    pModbusSlave_ = NULL;
     this->setWindowTitle("Modbus Debuger");
     QObject::connect(&sendCmdTimer_, SIGNAL(timeout()), this, SLOT(onSendCmd()));
-    QObject::connect(&modbusTimer_, SIGNAL(timeout()), this, SLOT(modbusTimerAdd()));
     QObject::connect(&modbusRunningTimer_, SIGNAL(timeout()), this, SLOT(runningModbus()));
     QObject::connect(&packBuffInfoTimer_, SIGNAL(timeout()), this, SLOT(refreshPackBuffInfo()));
-    modbusTimer_.start(1);
     modbusRunningTimer_.start(0);
     packBuffInfoTimer_.start(5);
 }
@@ -31,23 +29,28 @@ MainWindow::~MainWindow()
 
 void MainWindow::runningModbus()
 {
-    pModbusInstance_->runningModbus();
-}
-
-void MainWindow::modbusTimerAdd()
-{
+    if(pModbusMaster_ != NULL)
+    {
+        pModbusMaster_->runModbusMaster();
+    }
+    if(pModbusSlave_ != NULL)
+    {
+        pModbusSlave_->runModbusSlave();
+    }
 }
 
 void MainWindow::refreshPackBuffInfo()
 {
-    ui->buffSizeLineEdit->setText(QString::number(pModbusInstance_->packBuffSize()));
-    ui->buffFrontLineEdit->setText(QString::number(pModbusInstance_->packBuffFront()));
-    ui->buffRearineEdit->setText(QString::number(pModbusInstance_->packBuffRear()));
+#ifdef DEBUG_CODE
+    ui->buffSizeLineEdit->setText(QString::number(pModbusMaster_->sendBuffSize()));
+    ui->buffFrontLineEdit->setText(QString::number(pModbusMaster_->sendBuffFront()));
+    ui->buffRearineEdit->setText(QString::number(pModbusMaster_->sendBuffRear()));
+#endif
 }
 
 void MainWindow::on_clearErrorButton_clicked()
 {
-    pModbusInstance_->clearModbusError();
+    pModbusMaster_->clearMasterError();
 }
 
 void MainWindow::on_startSendButton_clicked()
@@ -72,7 +75,7 @@ void MainWindow::onSendCmd()
     {
         if(!cmdSelect_)
         {
-            pModbusInstance_->readDataFromSlave(ui->readSlaveIDLineEdit->text().toInt(),
+            pModbusMaster_->readDataFromSlave(ui->readSlaveIDLineEdit->text().toInt(),
                               !sendMode_ ? ui->readStartAddrLineEdit->text().toInt(&convertOk,16) : continueSendAddr_,
                               ui->readDataNumLineEdit->text().toInt());
             continueSendAddr_ < ui->endAddrLineEdit->text().toInt(&convertOk,16) ?
@@ -80,7 +83,7 @@ void MainWindow::onSendCmd()
         }
         else
         {
-            pModbusInstance_->writeDataToSlave(ui->writeSlaveIDLineEdit->text().toInt(),
+            pModbusMaster_->writeDataToSlave(ui->writeSlaveIDLineEdit->text().toInt(),
                              !sendMode_ ? ui->writeAddrLineEdit->text().toInt(&convertOk,16) : continueSendAddr_,
                              ui->writeValueLineEdit->text().toInt());
             continueSendAddr_ < ui->endAddrLineEdit->text().toInt(&convertOk,16) ?

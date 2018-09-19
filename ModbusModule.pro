@@ -26,11 +26,14 @@ DEFINES += QT_DEPRECATED_WARNINGS
 SOURCES += main.cpp\
         mainwindow.cpp \
     SerialPortHelper.cpp \
-    ModbusModule.cpp
+    ModbusSlave.cpp \
+    ModbusMaster.cpp
 
 HEADERS  += mainwindow.h \
     SerialPortHelper.h \
-    ModbusModule.h
+    ModbusSlave.h \
+    ModbusMaster.h \
+    ModbusComDef.h
 
 FORMS    += mainwindow.ui \
     SerialPortHelper.ui

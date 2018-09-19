@@ -3,7 +3,8 @@
 
 #include <QMainWindow>
 #include <QTimer>
-#include "ModbusModule.h"
+#include "ModbusMaster.h"
+#include "ModbusSlave.h"
 
 namespace Ui {
 class MainWindow;
@@ -14,8 +15,10 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(ModbusModule* pModbusInstance, QWidget *parent = 0);
+    explicit MainWindow(QWidget *parent = 0);
     ~MainWindow();
+    void setModbusMaster(ModbusMaster* pModbusMaster) { pModbusMaster_ = pModbusMaster;}
+    void setModbusSlave(ModbusSlave* pModbusSlave) { pModbusSlave_ = pModbusSlave;}
 
 public slots:
     void onSendCmd();
@@ -23,7 +26,6 @@ public slots:
 
 private slots:
     void runningModbus();
-    void modbusTimerAdd();
 
 private slots:
     void on_clearErrorButton_clicked();
@@ -45,10 +47,10 @@ private:
     bool startSendCmd_;
     int  continueSendAddr_;
     QTimer sendCmdTimer_;
-    QTimer modbusTimer_;
     QTimer modbusRunningTimer_;
     QTimer packBuffInfoTimer_;
-    ModbusModule* pModbusInstance_;
+    ModbusMaster* pModbusMaster_;
+    ModbusSlave* pModbusSlave_;
 };
 
 #endif // MAINWINDOW_H
