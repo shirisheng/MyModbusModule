@@ -1,7 +1,7 @@
 #ifndef MODBUSMASTER_H
 #define MODBUSMASTER_H
 
-#include "modbuscomdef.h"
+#include "ModbusComDef.h"
 
 /// @name Master Status
 /// @{
@@ -34,6 +34,7 @@ typedef struct
 {
     Uint8* pBuff;    ///< 发送缓冲区（数据格式: 包长+包数据）
     Uint16 buffLen;  ///< 缓冲区长度
+    Uint16 hasSend;  ///< 已发送长度
     Uint16 front;    ///< 指向队首数据包
     Uint16 rear;     ///< 指向队尾数据包
 } MasterSendBuff;
@@ -66,7 +67,7 @@ typedef struct
 
 typedef struct
 {
-    Uint16* pTimerCounter;   ///< 定时计数器
+    Uint16* pTimeCounter;   ///< 定时计数器
     Uint16  countCyclTime;   ///< 计数周期ms
 } MasterBaseTimer;
 
@@ -80,7 +81,7 @@ typedef struct
 
 typedef struct
 {
-    Uint16* pTimerCounter; ///< 定时计数器
+    Uint16* pTimeCounter;  ///< 定时计数器
     Uint16  countCyclTime; ///< 计数周期ms
     Uint16  commTimeOut;   ///< 通信超时时间ms
     Uint16  reSendTimes;   ///< 故障重发次数
@@ -109,8 +110,12 @@ public:
     void runModbusMaster();
     /// @brief 清除错误，使Master退出错误状态（该函数须在错误处理函数中调用）
     void clearMasterError();
+    Uint16 hasRecvLen() { return recvBuff_.hasRecv;}
+    Uint16 hasSendLen() { return sendBuff_.hasSend;}
+    void setHasRecvLen(Uint16 len) { recvBuff_.hasRecv = len;}
+    void setHasSendLen(Uint16 len) { sendBuff_.hasSend = len;}
+    Uint16 errorTimes() {return runInfo_.errTimes;}
 #ifdef DEBUG_CODE
-    Uint16 errorTimes(){return this->runInfo_.errTimes;}
     Uint16 sendBuffSize(){return sendBuff_.buffLen;}
     Uint16 sendBuffFront(){return sendBuff_.front;}
     Uint16 sendBuffRear(){return sendBuff_.rear;}
@@ -131,10 +136,12 @@ private:
     Bool deleteCurrPack(SendQueue* pQueue);
     Bool toFunCode03CmdPackRTU(Uint8 slaveID, Uint16 startReg,  Uint16 regNum);
     Bool toFunCode06CmdPackRTU(Uint8 slaveID, Uint16 startReg, Uint16 data);
+    void prepareForSend();
     Bool sendCurrCmdPackRTU();
     Bool getCmdPackHeader(Uint8* pHeader);
     Bool getRspPackHeader();
     Bool getRspPackLen(Uint8* pPackLen);
+    void prepareForRecv();
     Bool recvRspPackRTU();
     Sint16 getDataDescr();
     Bool handleRspPackRTU();
@@ -159,7 +166,7 @@ private:
     QMap<int,QString> errorToDecrMap_;
     SerialPortHelper* pSerialPort_;
     QTimer debugTimer_;
-    Uint16 timerCounter_;
+    Uint16 timeCounter_;
 #endif
 };
 

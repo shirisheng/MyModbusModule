@@ -1,7 +1,7 @@
 #ifndef MODBUSSLAVE_H
 #define MODBUSSLAVE_H
 
-#include "modbuscomdef.h"
+#include "ModbusComDef.h"
 
 /// @name Slave Status
 /// @{
@@ -23,6 +23,7 @@ enum SLAVE_ERROR
     SLAVE_Error3,      ///< 接收缓冲区空间不足
     SLAVE_Error4,      ///< 读寄存器缓冲区不足
     SLAVE_Error5,      ///< CRC校验错误
+	SLAVE_Error6,      ///< 接收长度错误
 };
 /// @} End of Slave Error
 
@@ -62,7 +63,7 @@ typedef struct
 
 typedef struct
 {
-    Uint16* pTimerCounter;   ///< 定时计数器
+    Uint16* pTimeCounter;    ///< 定时计数器
     Uint16  countCyclTime;   ///< 计数周期ms
 } SlaveBaseTimer;
 
@@ -76,9 +77,9 @@ typedef struct
 typedef struct
 {
     Uint8   slaveID;           ///< 当前使用的ID
-    Uint16  baudRate;          ///< 当前使用波特率
-    Uint16* pTimerCounter;     ///< Slave定时器
-    Uint16  countCyclTime;     ///< timer++周期时间
+    Uint32  baudRate;          ///< 当前使用波特率
+    Uint16* pTimeCounter;      ///< 定时计数器
+    Uint16  countCyclTime;     ///< 计数周期ms
     Uint16  sendBuffLen;       ///< 发送缓冲区长度
     Uint16  recvBuffLen;       ///< 接收缓冲区长度
     SlaveCallBack callBack;
@@ -101,6 +102,11 @@ public:
     void runModbusSlave();
     /// @brief 清除错误，使Slave退出错误状态
     void clearSlaveError();
+    Uint16 hasRecvLen() { return recvBuff_.hasRecv;}
+    Uint16 hasSendLen() { return sendBuff_.hasSend;}
+    void setHasRecvLen(Uint16 len) { recvBuff_.hasRecv = len;}
+    void setHasSendLen(Uint16 len) { sendBuff_.hasSend = len;}
+    Uint16 errorTimes() {return runInfo_.errTimes;}
 #ifdef DEBUG_CODE
     void setSerialPort(SerialPortHelper* pSerialPort);
 public slots:
@@ -111,8 +117,9 @@ private:
     Bool isInitSuccess() { return isInitOK_;}
     void baseTimerHandler();
     Bool isCmdPackComeIn();
+    void prepareForRecv();
     Bool recvCmdPackRTU();
-    void createGapTime(Uint16 baudRate);
+    void createGapTime(Uint32 baudRate);
     Bool isSlaveIDValid();
     Bool isSendBuffEnough(Uint16 sendLen);
     Bool funCode03CmdPackHandle();
@@ -120,13 +127,14 @@ private:
     Bool createExpRspPack(Uint8 exceptCode);
     Bool masterCmdPackHandle();
     void slaveErrorHandler();
+    void prepareForSend();
     Bool sendRspPackRTU();
-    Uint8 readRegister(Uint16* buff, Uint16 addr, Uint16 num);
-    Uint8 writeRegister(Uint16* buff, Uint16 addr, Uint16 num);
+    Sint16 readRegister(Uint16* buff, Uint16 addr, Uint16 num);
+    Sint16 writeRegister(Uint16* buff, Uint16 addr, Uint16 num);
 private:
     Bool   isInitOK_;  ///< 初始化成功
     Uint8  slaveID_;   ///< 当前使用的ID
-    Uint16 baudRate_;  ///< 当前波特率
+    Uint32 baudRate_;  ///< 当前波特率
     double rGapTime_;  ///< 接收间隔时间
     double fGapTime_;  ///< 帧间隔时间ms
     SlaveSendBuff  sendBuff_;

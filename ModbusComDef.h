@@ -4,11 +4,11 @@
 #define DEBUG_CODE
 #include <stdio.h>
 #include <stdint.h>
-#include "qglobal.h"
 #ifdef DEBUG_CODE
 #include <QMap>
 #include <QString>
 #include <QDebug>
+#include "qglobal.h"
 #include "SerialPortHelper.h"
 #endif
 
@@ -34,13 +34,15 @@
 
 /// @name Type Define
 /// @{
-#define TRUE         1
-#define FALSE        0
-typedef uint8_t    Bool;
-typedef int8_t     Sint8;
-typedef uint8_t    Uint8;
-typedef int16_t    Sint16;
-typedef uint16_t   Uint16;
+#define TRUE              1
+#define FALSE             0
+typedef unsigned char    Bool;
+typedef char             Sint8;
+typedef unsigned char    Uint8;
+typedef int16_t          Sint16;
+typedef uint16_t         Uint16;
+typedef int32_t          Sint32;
+typedef uint32_t         Uint32;
 /// @} End of Type Define
 
 /// @name Modbus Except Code

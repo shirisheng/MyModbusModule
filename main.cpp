@@ -19,7 +19,7 @@ Sint16 serial1Read(Uint8* pBuff, Uint16 len)
 
 Uint8 serial1HasData()
 {
-    return pSerialPort1->currentSerialPort()->bytesAvailable() == 0;
+    return pSerialPort1->currentSerialPort()->bytesAvailable() != 0;
 }
 
 void dataHandler1(Uint16* pData, Uint16 len, Uint16 descr)
@@ -44,7 +44,7 @@ Sint16 serial2Read(Uint8* pBuff, Uint16 len)
 
 Uint8 serial2HasData()
 {
-    return pSerialPort2->currentSerialPort()->bytesAvailable() == 0;
+    return pSerialPort2->currentSerialPort()->bytesAvailable() != 0;
 }
 
 void dataHandler2(Uint16* pData, Uint16 len, Uint16 descr)

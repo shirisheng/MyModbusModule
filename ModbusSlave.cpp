@@ -6,7 +6,7 @@ ModbusSlave::ModbusSlave(SlaveInitStruct initStruct):
 {
     slaveID_ = initStruct.slaveID;
     baudRate_ = initStruct.baudRate;
-    baseTimer_.pTimerCounter = initStruct.pTimerCounter;
+    baseTimer_.pTimeCounter = initStruct.pTimeCounter;
     baseTimer_.countCyclTime = initStruct.countCyclTime;
     recvBuff_.hasRecv = 0;
     recvBuff_.recvLen = initStruct.recvBuffLen;
@@ -28,11 +28,13 @@ ModbusSlave::ModbusSlave(SlaveInitStruct initStruct):
     runInfo_.status = SLAVE_IDLE_STATUS;
     createGapTime(baudRate_);
 
-    if(callBack_.readComDev != NULL
+    if(sendBuff_.pBuff != NULL
+	&&recvBuff_.pBuff != NULL
+	&&callBack_.readComDev != NULL
     && callBack_.writeComDev != NULL
     && callBack_.hasDataInComDev != NULL
 #ifndef DEBUG_CODE
-    && baseTimer_.pTimerCounter != NULL
+    && baseTimer_.pTimeCounter != NULL
     && callBack_.readRegister != NULL
     && callBack_.writeRegister != NULL
 #endif
@@ -50,9 +52,10 @@ ModbusSlave::ModbusSlave(SlaveInitStruct initStruct):
     errorToDecrMap_.insert(SLAVE_Error3, "接收缓冲区空间不足");
     errorToDecrMap_.insert(SLAVE_Error4, "读寄存器缓冲区不足");
     errorToDecrMap_.insert(SLAVE_Error5, "CRC校验错误");
+    errorToDecrMap_.insert(SLAVE_Error6, "接收长度错误");
     QObject::connect(&debugTimer_, SIGNAL(timeout()), this, SLOT(timeOutHandler()));
     baseTimer_.countCyclTime = 1;
-    baseTimer_.pTimerCounter = &timerCounter_;
+    baseTimer_.pTimeCounter = &timerCounter_;
     debugTimer_.start(1);
 #endif
 }
@@ -82,10 +85,10 @@ Uint16 ModbusSlave::createCRC16(Uint8 *str,Uint16 num)
 
 void ModbusSlave::baseTimerHandler()
 {
-    Uint8 incrTime = (*baseTimer_.pTimerCounter)
+    Uint8 incrTime = (*baseTimer_.pTimeCounter)
             *baseTimer_.countCyclTime;
     rGapTime_ += incrTime;
-    *(baseTimer_.pTimerCounter) = 0;
+    *(baseTimer_.pTimeCounter) = 0;
 }
 
 #ifdef DEBUG_CODE
@@ -100,7 +103,7 @@ void ModbusSlave::timeOutHandler()
 }
 #endif
 
-Uint8 ModbusSlave::readRegister(Uint16* buff, Uint16 addr, Uint16 num)
+Sint16 ModbusSlave::readRegister(Uint16* buff, Uint16 addr, Uint16 num)
 {
 #ifdef DEBUG_CODE
     for(int i = 0; i < num; i++)
@@ -111,7 +114,7 @@ Uint8 ModbusSlave::readRegister(Uint16* buff, Uint16 addr, Uint16 num)
 #endif
 }
 
-Uint8 ModbusSlave::writeRegister(Uint16* buff, Uint16 addr, Uint16 num)
+Sint16 ModbusSlave::writeRegister(Uint16* buff, Uint16 addr, Uint16 num)
 {
 #ifdef DEBUG_CODE
     for(int i = 0; i < num; i++)
@@ -122,7 +125,7 @@ Uint8 ModbusSlave::writeRegister(Uint16* buff, Uint16 addr, Uint16 num)
 #endif
 }
 
-void ModbusSlave::createGapTime(Uint16 baudRate)
+void ModbusSlave::createGapTime(Uint32 baudRate)
 {
     /// @brief 传输一个字符包含10位的二进制数据（起始位1+数据位8+停止位1）
     this->fGapTime_ = (1.0/baudRate)*10*3.5*1000;
@@ -130,7 +133,13 @@ void ModbusSlave::createGapTime(Uint16 baudRate)
 
 Bool ModbusSlave::isCmdPackComeIn()
 {
-    return !callBack_.hasDataInComDev();
+    return callBack_.hasDataInComDev();
+}
+
+void ModbusSlave::prepareForRecv()
+{
+	rGapTime_ = 0;
+    recvBuff_.hasRecv = 0;
 }
 
 /// @brief RTU模式的帧结束判断条件为: 3.5个字符时间内未接收到数据
@@ -141,7 +150,8 @@ Bool ModbusSlave::recvCmdPackRTU()
     Uint8* buff = recvBuff_.pBuff;
     Uint16 recvLen = recvBuff_.recvLen;
     Uint16 hasRecv = recvBuff_.hasRecv;
-    if(recvBuff_.recvLen > recvBuff_.buffLen)
+    if(recvLen > recvBuff_.buffLen
+    || hasRecv >= recvLen)
     {
         runInfo_.error = SLAVE_Error3;
         return FALSE;
@@ -151,10 +161,12 @@ Bool ModbusSlave::recvCmdPackRTU()
         rGapTime_ = 0;
         rdRetVal = callBack_.readComDev
                 (buff + hasRecv, recvLen - hasRecv);
-        recvBuff_.hasRecv += ((rdRetVal > 0) ? rdRetVal : 0);
+        recvBuff_.hasRecv +=
+        		((rdRetVal > 0) ? rdRetVal : 0);
     }
     if(rGapTime_ > fGapTime_)
     { //若帧结束判断条件成立
+        retVal = TRUE;
 #ifdef DEBUG_CODE
         pSerialPort_->showInCommBrowser(QString("Error Times: "),
                       QString::number(this->runInfo_.errTimes));
@@ -162,10 +174,13 @@ Bool ModbusSlave::recvCmdPackRTU()
                       QByteArray((char *)(recvBuff_.pBuff),
                       recvBuff_.hasRecv));
 #endif
-        retVal = TRUE;
-        recvBuff_.hasRecv = 0;
     }
     return retVal;
+}
+
+void ModbusSlave::prepareForSend()
+{
+    sendBuff_.hasSend = 0;
 }
 
 Bool ModbusSlave::sendRspPackRTU()
@@ -175,19 +190,21 @@ Bool ModbusSlave::sendRspPackRTU()
     Uint8* buff = sendBuff_.pBuff;
     Uint16 hasSend = sendBuff_.hasSend;
     Uint16 packLen = sendBuff_.sendLen;
-    wrRetVal = this->callBack_.writeComDev
-            (buff + hasSend, packLen - hasSend);
-    sendBuff_.hasSend += ((wrRetVal > 0) ? wrRetVal : 0);
-    if(sendBuff_.hasSend >= packLen)
+    if(sendBuff_.hasSend < packLen)
     {
+        wrRetVal = callBack_.writeComDev
+        		(buff + hasSend, packLen - hasSend);
+        sendBuff_.hasSend +=
+        		((wrRetVal > 0) ? wrRetVal : 0);
+    }
+    else
+    {
+        retVal = TRUE; //发送完成
 #ifdef DEBUG_CODE
         pSerialPort_->showInCommBrowser(QString("发送内容:"),
                       QByteArray((char *)(sendBuff_.pBuff),
                       sendBuff_.hasSend));
 #endif
-        retVal = TRUE; //发送完成
-        sendBuff_.sendLen = 0;
-        sendBuff_.hasSend = 0;
     }
     return retVal;
 }
@@ -212,30 +229,37 @@ Bool ModbusSlave::isSendBuffEnough(Uint16 sendLen)
 Bool ModbusSlave::funCode03CmdPackHandle()
 {
     Uint16 tmpBuff[100];
-    Uint16 i = 0, addr = 0, num = 0;
+    Uint16 i = 0, cmdPackLen = 0;
+    Uint16 addr = 0, num = 0;
     Uint16 crc = 0, crcRecv = 0;
     ReadMulRegCMD_X03* cmdFrame = (ReadMulRegCMD_X03*)recvBuff_.pBuff;
     ReadMulRegRSP_X03* rspFrame = (ReadMulRegRSP_X03*)sendBuff_.pBuff;
+    cmdPackLen = sizeof(ReadMulRegCMD_X03)/sizeof(Uint8);
+    if(recvBuff_.hasRecv != cmdPackLen)
+    {
+        runInfo_.error = SLAVE_Error6;
+        return FALSE;
+    }
     addr = cmdFrame->startRegL + cmdFrame->startRegH*256;
-    num = cmdFrame->regNumL + cmdFrame->regNumH*256;
-    crcRecv =cmdFrame->crcL + cmdFrame->crcH*256;
-    crc = createCRC16(recvBuff_.pBuff,
-                      sizeof(ReadMulRegCMD_X03)/sizeof(Uint8) - 2);
-    sendBuff_.sendLen = 3 + num*2 + 2;
     if(0)
     { //检查地址（addr和addr+num之间的地址）是否合法
         return createExpRspPack(Except_Code2);
     }
+    num = cmdFrame->regNumL + cmdFrame->regNumH*256;
     if(num > 100)
     {
         runInfo_.error = SLAVE_Error4;
         return FALSE;
     }
+    crcRecv =cmdFrame->crcL + cmdFrame->crcH*256;
+    crc = createCRC16(recvBuff_.pBuff,
+                      sizeof(ReadMulRegCMD_X03)/sizeof(Uint8) - 2);
     if(crc != crcRecv)
     {
         runInfo_.error = SLAVE_Error5;
         return FALSE;
     }
+    sendBuff_.sendLen = 3 + num*2 + 2;
     if(!isSendBuffEnough(sendBuff_.sendLen))
         return FALSE;
     readRegister(tmpBuff, addr , num);
@@ -255,29 +279,36 @@ Bool ModbusSlave::funCode03CmdPackHandle()
 
 Bool ModbusSlave::funCode06CmdPackHandle()
 {
+	Uint16 cmdPackLen = 0;
     Uint16 crc = 0, crcRecv = 0;
     Uint16 addr = 0, data = 0;
     WriteOneRegCMD_X06* cmdFrame = (WriteOneRegCMD_X06*)recvBuff_.pBuff;
     WriteOneRegRSP_X06* rspFrame = (WriteOneRegRSP_X06*)sendBuff_.pBuff;
+    cmdPackLen = sizeof(WriteOneRegCMD_X06)/sizeof(Uint8);
+    if(recvBuff_.hasRecv != cmdPackLen)
+    {
+        runInfo_.error = SLAVE_Error6;
+        return FALSE;
+    }
     addr = cmdFrame->startRegL + cmdFrame->startRegH*256;
-    data = cmdFrame->dataL + cmdFrame->dataH*256;
-    crcRecv =cmdFrame->crcL + cmdFrame->crcH*256;
-    crc = createCRC16(recvBuff_.pBuff,
-                      sizeof(WriteOneRegRSP_X06)/sizeof(Uint8) - 2);
-    sendBuff_.sendLen = sizeof(WriteOneRegRSP_X06)/sizeof(Uint8);
     if(0)
     { //检查地址addr是否合法
         return createExpRspPack(Except_Code2);
     }
+    data = cmdFrame->dataL + cmdFrame->dataH*256;
     if(0)
     { //检查要写入的数据data是否合法
         return createExpRspPack(Except_Code3);
     }
+    crcRecv =cmdFrame->crcL + cmdFrame->crcH*256;
+    crc = createCRC16(recvBuff_.pBuff,
+                      sizeof(WriteOneRegRSP_X06)/sizeof(Uint8) - 2);
     if(crc != crcRecv)
     {
         runInfo_.error = SLAVE_Error5;
         return FALSE;
     }
+    sendBuff_.sendLen = sizeof(WriteOneRegRSP_X06)/sizeof(Uint8);
     if(!isSendBuffEnough(sendBuff_.sendLen))
         return FALSE;
     writeRegister(&data, addr , 1);
@@ -314,7 +345,10 @@ Bool ModbusSlave::createExpRspPack(Uint8 exceptCode)
 Bool ModbusSlave::masterCmdPackHandle()
 {
     if(!this->isSlaveIDValid())
+    {
+    	runInfo_.status = SLAVE_IDLE_STATUS;
         return FALSE;
+    }
     switch(this->recvBuff_.pBuff[1])
     {
     case READ_MUL_HLD_REG:
@@ -330,7 +364,8 @@ void ModbusSlave::slaveErrorHandler()
 {
     if(runInfo_.error != SLAVE_Error0)
     {
-        runInfo_.errTimes++;
+    	if(runInfo_.error != SLAVE_Error6)
+    		runInfo_.errTimes++;
         runInfo_.status = SLAVE_ERROR_STATUS;
     }
 #ifdef DEBUG_CODE
@@ -362,7 +397,10 @@ void ModbusSlave::runModbusSlave()
     {
     case SLAVE_IDLE_STATUS:
         if(this->isCmdPackComeIn())
+        {
+        	this->prepareForRecv();
             runInfo_.status = SLAVE_RECV_STATUS;
+        }
         break;
     case SLAVE_RECV_STATUS:
         if(this->recvCmdPackRTU())
@@ -370,7 +408,10 @@ void ModbusSlave::runModbusSlave()
         break;
     case SLAVE_RECV_FINISH:
         if(this->masterCmdPackHandle())
+        {
+        	this->prepareForSend();
             runInfo_.status = SLAVE_RSPD_STATUS;
+        }
         break;
     case SLAVE_RSPD_STATUS:
         if(this->sendRspPackRTU())

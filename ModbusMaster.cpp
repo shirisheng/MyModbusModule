@@ -9,23 +9,24 @@ ModbusMaster::ModbusMaster(MasterInitStruct initStruct):
     currRecvTime_(0),
     reSendCount_(0)
 #ifdef DEBUG_CODE
-   ,timerCounter_(0)
+   ,timeCounter_(0)
 #endif
 {
     this->runInfo_.status = MASTER_IDLE_STATUS;
     this->runInfo_.exceptCode = Except_Code0;
     this->runInfo_.error = Master_Error0;
     this->runInfo_.errTimes = 0;
+    this->sendBuff_.hasSend = 0;
     this->sendBuff_.front = 0;
     this->sendBuff_.rear = 0;
     this->recvBuff_.hasRecv = 0;
     this->recvBuff_.dataLen = 0;
     this->recvBuff_.pDArea = NULL;
 #ifdef DEBUG_CODE
-    this->baseTimer_.pTimerCounter = &timerCounter_;
+    this->baseTimer_.pTimeCounter = &timeCounter_;
     this->baseTimer_.countCyclTime = 1;
 #else
-    this->baseTimer_.pTimerCounter = initStruct.pTimerCounter;
+    this->baseTimer_.pTimeCounter = initStruct.pTimeCounter;
     this->baseTimer_.countCyclTime = initStruct.countCyclTime;
 #endif
     this->commTimeOut_ = initStruct.commTimeOut;
@@ -40,9 +41,12 @@ ModbusMaster::ModbusMaster(MasterInitStruct initStruct):
     this->callBack_.dataHandler = initStruct.callBack.dataHandler;
     this->callBack_.errorHandler = initStruct.callBack.errorHandler;
     if(sendBuff_.pBuff != NULL
-    && sendBuff_.pBuff != NULL
     && recvBuff_.pBuff != NULL
-    && baseTimer_.pTimerCounter != NULL)
+	&& callBack_.readComDev != NULL
+	&& callBack_.writeComDev != NULL
+	&& callBack_.dataHandler != NULL
+	&& callBack_.errorHandler != NULL
+    && baseTimer_.pTimeCounter != NULL)
     {
         isInitOK_ = TRUE;
     } else isInitOK_ = FALSE;
@@ -75,7 +79,7 @@ void ModbusMaster::setSerialPort(SerialPortHelper* pSerialPort)
 
 void ModbusMaster::timeOutHandler()
 {
-    this->timerCounter_++;
+    this->timeCounter_++;
 }
 #endif
 
@@ -97,11 +101,11 @@ Uint16 ModbusMaster::createCRC16(Uint8 *str,Uint16 num)
 
 void ModbusMaster::baseTimerHandler()
 {
-    Uint8 incrTime = (*baseTimer_.pTimerCounter)
+    Uint8 incrTime = (*baseTimer_.pTimeCounter)
             *baseTimer_.countCyclTime;
     heartChkTime_ += incrTime;
     currRecvTime_ += incrTime;
-    *(baseTimer_.pTimerCounter) = 0;
+    *(baseTimer_.pTimeCounter) = 0;
 }
 
 Bool ModbusMaster::isSendBuffEmpty()
@@ -121,7 +125,7 @@ Bool ModbusMaster::insertElement(SendQueue* pQueue, Uint8 data)
 
 Bool ModbusMaster::deleteElement(SendQueue* pQueue, Uint8* pPack)
 {
-    if (pQueue->front == pQueue->rear)
+    if(pQueue->front == pQueue->rear)
         return FALSE; //缓冲队列空，直接返回
     *pPack = pQueue->pBuff[pQueue->front];
     pQueue->front = (pQueue->front + 1) % pQueue->buffLen;
@@ -274,36 +278,36 @@ Bool ModbusMaster::writeDataToSlave(Uint8 slaveID, Uint16 addr, Uint16 data)
     return toFunCode06CmdPackRTU(slaveID, addr, data);
 }
 
+void ModbusMaster::prepareForSend()
+{
+    sendBuff_.hasSend = 0;
+}
+
 Bool ModbusMaster::sendCurrCmdPackRTU()
 {
     Bool retVal = FALSE;
     Sint16 wrRetVal = 0;
     Uint16 packLen = 50;
     static Uint8 currPack[50]; //当前数据包发送缓冲区
-    static Uint16 hasSend = 0;
+    Uint16 hasSend = sendBuff_.hasSend;
     retVal = getCurrPack(&sendBuff_, currPack, &packLen);
-    if(retVal == TRUE)
-    {
-        wrRetVal = this->callBack_.writeComDev
-                (currPack + hasSend, packLen - hasSend);
-        hasSend += ((wrRetVal > 0) ? wrRetVal : 0);
-    }
-    else
+    if(retVal != TRUE)
     {
         runInfo_.error = Master_Error7;
         return FALSE;
     }
     retVal = FALSE;
-    if(hasSend >= packLen)
+    if(sendBuff_.hasSend < packLen)
+    {
+        wrRetVal = callBack_.writeComDev
+        		(currPack + hasSend, packLen - hasSend);
+        sendBuff_.hasSend +=
+        		((wrRetVal > 0) ? wrRetVal : 0);
+    }
+    else
     { //发送完成
         retVal = TRUE;
-        hasSend = 0;
-        this->currRecvTime_ = 0;
-        this->recvBuff_.hasRecv = 0;
-    }
 #ifdef DEBUG_CODE
-    if(retVal == TRUE)
-    {
         pSerialPort_->showInCommBrowser(QString("Error Times: "),
                       QString::number(this->runInfo_.errTimes));
         pSerialPort_->showInCommBrowser(QString("发送内容:"),
@@ -316,8 +320,8 @@ Bool ModbusMaster::sendCurrCmdPackRTU()
 //            debug("%d ",pPackData[i]);
 //        }
 //        debug("\n\n\n");
-    }
 #endif
+    }
     return retVal;
 }
 
@@ -392,25 +396,39 @@ Bool ModbusMaster::getRspPackLen(Uint8* pPackLen)
     return retVal;
 }
 
+void ModbusMaster::prepareForRecv()
+{
+	currRecvTime_  = 0;
+	recvBuff_.hasRecv = 0;
+}
+
 Bool ModbusMaster::recvRspPackRTU()
 {
     Bool retVal = FALSE;
     Sint16 rdRetVal = 0;
-    static Uint8 packLen = 0;
     static Uint8 recvStep = 1;
     Uint8* buff = recvBuff_.pBuff;
     Uint16 recvLen = recvBuff_.recvLen;
     Uint16 hasRecv = recvBuff_.hasRecv;
-    if(recvBuff_.recvLen > recvBuff_.buffLen)
+    static Uint8 packLen = recvBuff_.recvLen;
+    if(recvLen > recvBuff_.buffLen
+    || hasRecv >= recvLen)
     {
         runInfo_.error = Master_Error3;
         return FALSE;
     }
-    rdRetVal = callBack_.readComDev
-            (buff + hasRecv, recvLen - hasRecv);
-    recvBuff_.hasRecv += ((rdRetVal > 0) ? rdRetVal : 0);
     if(this->currRecvTime_ > this->commTimeOut_)
-        {recvStep = 1; this->runInfo_.error = Master_Error6;}
+    {
+    	this->runInfo_.error = Master_Error6;
+    	recvStep = 1;return FALSE;
+    }
+    if(hasRecv < packLen)
+    {
+        rdRetVal = callBack_.readComDev
+                (buff + hasRecv, recvLen - hasRecv);
+        recvBuff_.hasRecv +=
+        		((rdRetVal > 0) ? rdRetVal : 0);
+    }
     switch(recvStep)
     {
     case 1:
@@ -426,27 +444,23 @@ Bool ModbusMaster::recvRspPackRTU()
         {
             recvStep = 1;
             retVal = TRUE;
+#ifdef DEBUG_CODE
+			pSerialPort_->showInCommBrowser(QString("接收内容:"),
+						  QByteArray((char *)this->recvBuff_.pBuff,
+						  this->recvBuff_.hasRecv));
+//			debug("接收内容:");
+//			int i = 0;
+//			for(i = 0; i < this->recvBuff_.recvLen; i++)
+//			{
+//				debug("%d ",this->recvBuff_.pBuff[i]);
+//			}
+//			debug("\n\n\n");
+#endif
         }
         else break;
-    default:
-        recvStep = 1;
-        break;
+    default: recvStep = 1;
+    break;
     }
-#ifdef DEBUG_CODE
-    if(retVal == TRUE)
-    {
-        pSerialPort_->showInCommBrowser(QString("接收内容:"),
-                      QByteArray((char *)this->recvBuff_.pBuff,
-                      this->recvBuff_.hasRecv));
-//        debug("接收内容:");
-//        int i = 0;
-//        for(i = 0; i < this->recvBuff_.recvLen; i++)
-//        {
-//            debug("%d ",this->recvBuff_.pBuff[i]);
-//        }
-//        debug("\n\n\n");
-    }
-#endif
     return retVal;
 }
 
@@ -600,13 +614,19 @@ void ModbusMaster::runModbusMaster()
     {
     case MASTER_IDLE_STATUS:
         if(!this->isSendBuffEmpty())
+        {
+        	this->prepareForSend();
             this->runInfo_.status = MASTER_SEND_STATUS;
+        }
         else
             this->heartbeatDetect();
         break;
     case MASTER_SEND_STATUS:
         if(this->sendCurrCmdPackRTU())
+        {
+        	this->prepareForRecv();
             this->runInfo_.status = MASTER_RECV_STATUS;
+        }
         break;
     case MASTER_RECV_STATUS:
         if(this->recvRspPackRTU())
