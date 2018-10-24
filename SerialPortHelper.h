@@ -33,7 +33,7 @@ public:
     QSerialPort * currentSerialPort(){return &currentSerialPort_;}
 
 signals:
-    recvFinishSignal(Uint8* pRecvBuff, Uint16 buffLen);
+    void recvFinishSignal(Uint8* pRecvBuff, Uint16 buffLen);
 
 public slots:
 //    void recvData();
