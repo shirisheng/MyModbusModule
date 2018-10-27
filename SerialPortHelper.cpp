@@ -1,4 +1,5 @@
 #include <QDebug>
+#include <QStringList>
 #include "SerialPortHelper.h"
 #include "ui_SerialPortHelper.h"
 
@@ -6,14 +7,14 @@ SerialPortHelper* SerialPortHelper::pSerialPortHelper_ = NULL;
 SerialPortHelper::SerialPortHelper(QWidget *parent) :
     QFrame(parent),
     ui(new Ui::SerialPortHelper),
-    showMode_(true),
-    stopScroll_(false)
+    showFormat_(0),
+    inputFormat_(0),
+    isScroll_(true)
 {
     ui->setupUi(this);
     this->setWindowTitle("Serial Port Helper");
-//    QObject::connect(&timer_, SIGNAL(timeout()), this, SLOT(recvFinish()));
-//    QObject::connect(&currentSerialPort_, SIGNAL(readyRead()), this, SLOT(recvData()));
-    QObject::connect(&currentSerialPort_, SIGNAL(bytesWritten(qint64)), this, SLOT(sendContinue(qint64)));
+    QObject::connect(&currentSerialPort_, SIGNAL(error(QSerialPort::SerialPortError)),
+                     this, SLOT(onSerialError(QSerialPort::SerialPortError)));
 }
 
 SerialPortHelper::~SerialPortHelper()
@@ -21,91 +22,139 @@ SerialPortHelper::~SerialPortHelper()
     delete ui;
 }
 
-void SerialPortHelper::showInCommBrowser(QString descr, QString strToShow)
+void SerialPortHelper::showInCommBrowser(QString descr, QString content)
 {
-    if(stopScroll_) return;
+    if(!isScroll_) return;
     descr.append("\n");
-    ui->commStatusBrowser->insertPlainText(descr + strToShow);
+    ui->commStatusBrowser->insertPlainText(descr + content);
     ui->commStatusBrowser->insertPlainText(QString("\n\n\n"));
     ui->commStatusBrowser->moveCursor(QTextCursor::End);
 }
 
-void SerialPortHelper::showInCommBrowser(QString descr, QByteArray dataToShow)
+void SerialPortHelper::showInCommBrowser(QString descr, QByteArray content)
 {
-    if(stopScroll_) return;
-    QString strToShow(descr);
-    strToShow.append("\n");
-    if(!showMode_)
+    if(!isScroll_) return;
+    QString contentStr(descr);
+    contentStr.append("\n");
+    if(showFormat_ == ShowFormat_RowData)
     {
-        for(int i = 0; i < dataToShow.size(); i++)
-            strToShow.append(QString::number((quint8)dataToShow.at(i))).append(" ");
+        for(int i = 0; i < content.size(); i++)
+        {
+            quint8 tmpVal = (quint8)content.at(i);
+            contentStr.append(tmpVal < 0x10 ? QString("0") : QString(""));
+            contentStr.append(QString::number(tmpVal, 16)).append(" ");
+        }
     }
-    else strToShow.append(dataToShow.data());
-    ui->commStatusBrowser->insertPlainText(strToShow);
+    else if(showFormat_ == ShowFormat_Text)
+        contentStr.append(content.data());
+    ui->commStatusBrowser->insertPlainText(contentStr);
     ui->commStatusBrowser->insertPlainText(QString("\n\n\n"));
     ui->commStatusBrowser->moveCursor(QTextCursor::End);
 }
 
-//void SerialPortHelper::recvData()
-//{
-//    timer_.start(5);
-//    QByteArray recvData = currentSerialPort_.readAll();
-//    recvBuff_.append(recvData);
-//}
-
-//void SerialPortHelper::recvFinish()
-//{
-//    timer_.stop();
-//    QString descr("接收内容:");
-//    showInCommBrowser(descr,recvBuff_);
-//    emit recvFinishSignal((quint8 *)recvBuff_.data(), recvBuff_.size());
-//    recvBuff_.clear();
-//}
-
-qint64 SerialPortHelper::sendData(const QByteArray &data)
+qint64 SerialPortHelper::readSerial(quint8* pBuff, quint16 len)
 {
+    if(!currentSerialPort_.isOpen()
+    || currentSerialPort_.error() != QSerialPort::NoError)
+        return -1;
+    QObject::disconnect(&currentSerialPort_, SIGNAL(readyRead()),
+                        this, SLOT(onReadyRead()));
+    return currentSerialPort_.read((char*)pBuff, len);
+}
+
+qint64 SerialPortHelper::writeSerial(quint8* pBuff, quint16 len)
+{
+    if(!currentSerialPort_.isOpen()
+    || currentSerialPort_.error() != QSerialPort::NoError)
+        return -1;
+    QObject::disconnect(&currentSerialPort_, SIGNAL(bytesWritten(qint64)),
+                     this, SLOT(onBytesWritten(qint64)));
+    return currentSerialPort_.write((char*)pBuff, len);
+}
+
+void SerialPortHelper::sendAll(const QByteArray &data)
+{
+    if(!currentSerialPort_.isOpen()
+    || currentSerialPort_.error() != QSerialPort::NoError)
+        return;
+    this->recvBuff_.clear();
+    this->sendBuff_.clear();
+    QObject::connect(&currentSerialPort_, SIGNAL(bytesWritten(qint64)),
+                     this, SLOT(onBytesWritten(qint64)));
+    QObject::connect(&currentSerialPort_, SIGNAL(readyRead()),
+                     this, SLOT(onReadyRead()));
+    QObject::connect(&readFinishTimer_, SIGNAL(timeout()),
+                     this, SLOT(onReadFinish()));
     this->sendBuff_.append(data);
-    qint64 bytes = currentSerialPort_.write(sendBuff_);
-    this->sendBuff_.remove(0,bytes);
-//    showInCommBrowser(QString("发送内容:"),data);
-    return bytes;
+    currentSerialPort_.write(sendBuff_);
+    showInCommBrowser(QString("Send Content:"),sendBuff_);
 }
 
-qint64 SerialPortHelper::sendData(quint8* pPackBuff, quint16 packLen)
+void SerialPortHelper::onReadyRead()
 {
-    return sendData(QByteArray((char*)pPackBuff, packLen));
+    if(!currentSerialPort_.isOpen()
+    || currentSerialPort_.error() != QSerialPort::NoError)
+        return;
+    readFinishTimer_.start(5);
+    QByteArray recvData = currentSerialPort_.readAll();
+    recvBuff_.append(recvData);
 }
 
-void SerialPortHelper::sendContinue(qint64 writtenBytes)
+void SerialPortHelper::onReadFinish()
 {
-    if(sendBuff_.isEmpty()) return;
-    qint64 bytes = currentSerialPort_.write(sendBuff_);
+    readFinishTimer_.stop();
+    QObject::disconnect(&currentSerialPort_, SIGNAL(readyRead()),
+                        this, SLOT(onReadyRead()));
+    QObject::disconnect(&readFinishTimer_, SIGNAL(timeout()),
+                        this, SLOT(onReadFinish()));
+    QString descr("recv content:");
+    showInCommBrowser(descr,recvBuff_);
+}
+
+void SerialPortHelper::onBytesWritten(qint64 bytes)
+{
     this->sendBuff_.remove(0,bytes);
+    if(sendBuff_.isEmpty())
+    {
+        QObject::disconnect(&currentSerialPort_, SIGNAL(bytesWritten(qint64)),
+                            this, SLOT(onBytesWritten(qint64)));
+        return;
+    }
+    currentSerialPort_.write(sendBuff_);
+}
+
+void SerialPortHelper::onSerialError(QSerialPort::SerialPortError error)
+{
+    if(!currentSerialPort_.isOpen())
+        return;
+    currentSerialPort_.clear();
+    currentSerialPort_.clearError();
+    showInCommBrowser(QString("Serial Error : "),QString::number(error));
 }
 
 void SerialPortHelper::on_refreshSerialButton_clicked()
 {
-    QString strToShow;
+    QString content;
     ui->serialSelectComboBox->clear();
     ui->serialSelectComboBox->clearEditText();
     availablePorts_ = QSerialPortInfo::availablePorts();
     if(availablePorts_.isEmpty()) return;
     foreach(const QSerialPortInfo &info, QSerialPortInfo::availablePorts())
     {
-        strToShow.append("Serial Port : ").append(info.portName()).append("\n");
-        strToShow.append("Description : ").append(info.description()).append("\n");
-        strToShow.append("Manufacturer: ").append(info.manufacturer()).append("\n\n");
+        content.append("Serial Port : ").append(info.portName()).append("\n");
+        content.append("Description : ").append(info.description()).append("\n");
+        content.append("Manufacturer: ").append(info.manufacturer()).append("\n\n");
         if (ui->serialSelectComboBox->currentText() != info.portName())
         {
             ui->serialSelectComboBox->addItem(info.portName());
         }
     }
-    showInCommBrowser(QString("Available Serial Port:"),strToShow);
+    showInCommBrowser(QString("Available Serial Port:"),content);
 }
 
 void SerialPortHelper::on_saveSettingButton_clicked()
 {
-    QString strToShow;
+    QString content;
     if(!currentSerialPort_.isOpen()) return;
     currentSerialPort_.setBaudRate(ui->baudRateSetComboBox->currentText().toInt());
     currentSerialPort_.setDataBits((QSerialPort::DataBits)ui->dataBitsSetComboBox->currentText().toInt());
@@ -114,21 +163,43 @@ void SerialPortHelper::on_saveSettingButton_clicked()
     else currentSerialPort_.setParity((QSerialPort::Parity)ui->paritySetComboBox->currentIndex());
     currentSerialPort_.setStopBits((QSerialPort::StopBits)ui->stopBitsSetComboBox->currentText().toInt());
     currentSerialPort_.setFlowControl((QSerialPort::FlowControl)ui->flowCtrlSetComboBox->currentIndex());
-    strToShow.append("PortName    : ").append(ui->serialSelectComboBox->currentText()).append("\n");
-    strToShow.append("BaudRate    : ").append(ui->baudRateSetComboBox->currentText()).append("\n");
-    strToShow.append("DataBits    : ").append(ui->dataBitsSetComboBox->currentText()).append("\n");
-    strToShow.append("Parity      : ").append(ui->paritySetComboBox->currentText()).append("\n");
-    strToShow.append("stopBits    : ").append(ui->stopBitsSetComboBox->currentText()).append("\n");
-    strToShow.append("FlowControl : ").append(ui->flowCtrlSetComboBox->currentText()).append("\n");
-    showInCommBrowser(QString("Serial Port Setting:"),strToShow);
+    content.append("PortName    : ").append(ui->serialSelectComboBox->currentText()).append("\n");
+    content.append("BaudRate    : ").append(ui->baudRateSetComboBox->currentText()).append("\n");
+    content.append("DataBits    : ").append(ui->dataBitsSetComboBox->currentText()).append("\n");
+    content.append("Parity      : ").append(ui->paritySetComboBox->currentText()).append("\n");
+    content.append("stopBits    : ").append(ui->stopBitsSetComboBox->currentText()).append("\n");
+    content.append("FlowControl : ").append(ui->flowCtrlSetComboBox->currentText()).append("\n");
+    showInCommBrowser(QString("Serial Port Setting:"),content);
 }
 
 void SerialPortHelper::on_sendButton_clicked()
 {
-    QString contentToSend = ui->sendContentEdit->toPlainText();
-    currentSerialPort_.write(contentToSend.toUtf8().data(),contentToSend.toUtf8().size());
-    showInCommBrowser(QString("Send Content:"),contentToSend.toUtf8());
-//    timer_.singleShot(5,this, SLOT(readData()));
+    QString contentToSend;
+    contentToSend = ui->sendContentEdit->toPlainText();
+    if(inputFormat_ == InputFormat_Hex)
+    {
+        QByteArray dataTosend;
+        contentToSend.remove(QRegExp("^\\s+"));
+        contentToSend.remove(QRegExp("\\s+$"));
+        QStringList strList = contentToSend.split(QRegExp("\\s+"));
+        for(int i = 0; i < strList.size(); i++)
+        {
+            bool convertOk = false;
+            int tempVal = strList[i].toInt(&convertOk,16);
+            if(strList.at(i).size() > 2 || !convertOk)
+            {
+                QString error("Hex format input error!");
+                showInCommBrowser(error,QString(""));
+                return;
+            }
+            dataTosend.append(tempVal);
+        }
+        this->sendAll(dataTosend);
+    }
+    else if(inputFormat_ == InputFormat_Text)
+    {
+        this->sendAll(contentToSend.toUtf8());
+    }
 }
 
 void SerialPortHelper::on_openSerialButton_clicked(bool checked)
@@ -136,18 +207,18 @@ void SerialPortHelper::on_openSerialButton_clicked(bool checked)
     if(checked)
     {
         QString portName = ui->serialSelectComboBox->currentText();
-        currentSerialPort_.setPortName(portName); //选取串口
+        currentSerialPort_.setPortName(portName); /// 选取串口
         if(!currentSerialPort_.open(QIODevice::ReadWrite))
-        { //打开串口
+        { /// 打开串口
             showInCommBrowser(QString(""),QString(portName).
-                              append(" open failure!"));
+                              append(" Open failure!"));
             ui->openSerialButton->setChecked(false);
             ui->openSerialButton->setText(tr("Open Port"));
         }
         else
         {
             showInCommBrowser(QString(""),QString(portName).
-                              append(" open successfully!"));
+                              append(" Open successfully!"));
             ui->openSerialButton->setText(tr("Close Port"));
         }
     }
@@ -156,13 +227,14 @@ void SerialPortHelper::on_openSerialButton_clicked(bool checked)
         currentSerialPort_.close();
         ui->openSerialButton->setText(tr("Open Port"));
         showInCommBrowser(QString(""),QString(currentSerialPort_.portName()).
-                          append(" open successfully!"));
+                          append(" Close successfully!"));
     }
 }
 
 void SerialPortHelper::on_serialSelectComboBox_currentIndexChanged(int index)
 {
-    currentSerialPort_.close();
+    if(currentSerialPort_.isOpen())
+        currentSerialPort_.close();
     ui->openSerialButton->setChecked(false);
     ui->openSerialButton->setText(tr("Open Port"));
 }
@@ -172,18 +244,20 @@ void SerialPortHelper::on_clearScreenButton_clicked()
     ui->commStatusBrowser->clear();
 }
 
-void SerialPortHelper::on_showModeButton_clicked()
-{
-    showMode_ = !showMode_;
-    if(showMode_)
-        ui->showModeButton->setText(tr("Text"));
-    else ui->showModeButton->setText(tr("Row Data"));
-}
-
 void SerialPortHelper::on_stopScrollButton_clicked()
 {
-    stopScroll_ = !stopScroll_;
-    if(stopScroll_)
-        ui->stopScrollButton->setText(tr("Scroll"));
-    else ui->stopScrollButton->setText(tr("Stop Scroll"));
+    isScroll_ = !isScroll_;
+    if(isScroll_)
+        ui->stopScrollButton->setText(tr("Stop Scroll"));
+    else ui->stopScrollButton->setText(tr("Scroll"));
+}
+
+void SerialPortHelper::on_showFormatComboBox_currentIndexChanged(int index)
+{
+    this->showFormat_ = index;
+}
+
+void SerialPortHelper::on_inputFormatComboBox_currentIndexChanged(int index)
+{
+    this->inputFormat_ = index;
 }

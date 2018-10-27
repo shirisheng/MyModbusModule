@@ -15,15 +15,15 @@
 
 /// @name Slave Error
 /// @{
-enum SLAVE_ERROR
+enum SlaveError
 {
-    SLAVE_Error0 = 0,
-    SLAVE_Error1,      ///< 初始化失败
-    SLAVE_Error2,      ///< 发送缓冲区空间不足
-    SLAVE_Error3,      ///< 接收缓冲区空间不足
-    SLAVE_Error4,      ///< 读寄存器缓冲区不足
-    SLAVE_Error5,      ///< CRC校验错误
-	SLAVE_Error6,      ///< 接收长度错误
+    Slave_Error0 = 0,
+    Slave_Error1,      ///< 初始化失败
+    Slave_Error2,      ///< 发送缓冲区空间不足
+    Slave_Error3,      ///< 接收缓冲区空间不足
+    Slave_Error4,      ///< 读寄存器缓冲区不足
+    Slave_Error5,      ///< CRC校验错误
+    Slave_Error6,      ///< 接收长度错误
 };
 /// @} End of Slave Error
 
@@ -64,7 +64,7 @@ typedef struct
 typedef struct
 {
     Uint16* pTimeCounter;    ///< 定时计数器
-    Uint16  countCyclTime;   ///< 计数周期ms
+    double  countCyclTime;   ///< 计数周期ms
 } SlaveBaseTimer;
 
 typedef struct
@@ -79,7 +79,7 @@ typedef struct
     Uint8   slaveID;           ///< 当前使用的ID
     Uint32  baudRate;          ///< 当前使用波特率
     Uint16* pTimeCounter;      ///< 定时计数器
-    Uint16  countCyclTime;     ///< 计数周期ms
+    double  countCyclTime;     ///< 计数周期ms
     Uint16  sendBuffLen;       ///< 发送缓冲区长度
     Uint16  recvBuffLen;       ///< 接收缓冲区长度
     SlaveCallBack callBack;
@@ -120,11 +120,13 @@ private:
     void prepareForRecv();
     Bool recvCmdPackRTU();
     void createGapTime(Uint32 baudRate);
+    Bool isBroadcastPack();
     Bool isSlaveIDValid();
     Bool isSendBuffEnough(Uint16 sendLen);
     Bool funCode03CmdPackHandle();
     Bool funCode06CmdPackHandle();
     Bool createExpRspPack(Uint8 exceptCode);
+    void broadcastPackHandle();
     Bool masterCmdPackHandle();
     void slaveErrorHandler();
     void prepareForSend();

@@ -1,6 +1,5 @@
 #include "ModbusMaster.h"
 #ifdef DEBUG_CODE
-//#include "debug.h"
 #include "SerialPortHelper.h"
 #endif
 
@@ -57,7 +56,7 @@ ModbusMaster::ModbusMaster(MasterInitStruct initStruct):
     errorToDecrMap_.insert(Master_Error4, "CRC校验错误");
     errorToDecrMap_.insert(Master_Error5, "从机返回异常响应帧");
     errorToDecrMap_.insert(Master_Error6, "通信接收超时");
-    errorToDecrMap_.insert(Master_Error7, "获取当前数据包失败");
+    errorToDecrMap_.insert(Master_Error7, "临时缓冲区空间不足");
     QObject::connect(&debugTimer_, SIGNAL(timeout()), this, SLOT(timeOutHandler()));
     debugTimer_.start(1);
 #endif
@@ -73,8 +72,6 @@ ModbusMaster::~ModbusMaster()
 void ModbusMaster::setSerialPort(SerialPortHelper* pSerialPort)
 {
     pSerialPort_ = pSerialPort;
-//    QObject::connect(pSerialPort_, SIGNAL(recvFinishSignal(Uint8*, Uint16)),
-//                     this, SLOT(notifyModbusRecvFinish(Uint8*, Uint16)));
 }
 
 void ModbusMaster::timeOutHandler()
@@ -116,9 +113,9 @@ Bool ModbusMaster::isSendBuffEmpty()
 Bool ModbusMaster::insertElement(SendQueue* pQueue, Uint8 data)
 {
     if((pQueue->rear + 1) % pQueue->buffLen == pQueue->front)
-        return FALSE; //队列已满时,不执行入队操作
+        return FALSE; /// 队列已满时,不执行入队操作
     pQueue->pBuff[pQueue->rear] = data;
-    //尾指针指向下一个位置
+    /// 尾指针指向下一个位置
     pQueue->rear = (pQueue->rear + 1) % pQueue->buffLen;
     return TRUE;
 }
@@ -126,7 +123,7 @@ Bool ModbusMaster::insertElement(SendQueue* pQueue, Uint8 data)
 Bool ModbusMaster::deleteElement(SendQueue* pQueue, Uint8* pPack)
 {
     if(pQueue->front == pQueue->rear)
-        return FALSE; //缓冲队列空，直接返回
+        return FALSE; /// 缓冲队列空，直接返回
     *pPack = pQueue->pBuff[pQueue->front];
     pQueue->front = (pQueue->front + 1) % pQueue->buffLen;
     return TRUE;
@@ -140,14 +137,14 @@ Bool ModbusMaster::insertPack(SendQueue* pQueue, Uint8* pPack, Uint16 packLen)
         return FALSE;
     if(!insertElement(pQueue,packLen >> 8)
     || !insertElement(pQueue,packLen & 0x0FF))
-    { //插入包长度
+    { /// 插入包长度
         pQueue->rear = rear;
         return FALSE;
     }
     for(i = 0; i < packLen; i++)
     {
         if(!insertElement(pQueue,pPack[i]))
-        { //插入包内容
+        { /// 插入包内容
             pQueue->rear = rear;
             return FALSE;
         }
@@ -285,10 +282,12 @@ void ModbusMaster::prepareForSend()
 
 Bool ModbusMaster::sendCurrCmdPackRTU()
 {
+#define TEMP_BUFF_LEN 50
     Bool retVal = FALSE;
     Sint16 wrRetVal = 0;
-    Uint16 packLen = 50;
-    static Uint8 currPack[50]; //当前数据包发送缓冲区
+    Uint16 packLen = TEMP_BUFF_LEN;
+    /// 数据包发送临时缓冲区
+    static Uint8 currPack[TEMP_BUFF_LEN];
     Uint16 hasSend = sendBuff_.hasSend;
     retVal = getCurrPack(&sendBuff_, currPack, &packLen);
     if(retVal != TRUE)
@@ -305,21 +304,13 @@ Bool ModbusMaster::sendCurrCmdPackRTU()
         		((wrRetVal > 0) ? wrRetVal : 0);
     }
     else
-    { //发送完成
+    { /// 发送完成
         retVal = TRUE;
 #ifdef DEBUG_CODE
         pSerialPort_->showInCommBrowser(QString("Error Times: "),
                       QString::number(this->runInfo_.errTimes));
         pSerialPort_->showInCommBrowser(QString("发送内容:"),
                       QByteArray((char *)currPack, packLen));
-//        debug("Error Times: %d",this->runInfo_.errTimes);
-//        debug("发送内容:");
-//        int i = 0;
-//        for(i = 0; i < dataLen; i++)
-//        {
-//            debug("%d ",pPackData[i]);
-//        }
-//        debug("\n\n\n");
 #endif
     }
     return retVal;
@@ -348,13 +339,13 @@ Bool ModbusMaster::getRspPackHeader()
     {
         if(cmdPackHeader[0] == pBuff[i] &&
            cmdPackHeader[1] == (pBuff[i+1] & 0x7F))
-        {
+        { /// 0x7的作用在于将异常功能码考虑在内
             retVal = TRUE;break;
         }
     }
     foundPos = i;
     if(foundPos != 0)
-    { //去掉无效数据，将包头对齐到RecvBuff首部
+    { /// 去掉无效数据，将包头对齐到RecvBuff首部
         this->recvBuff_.hasRecv = 0;
         for(i = foundPos; i < hasRecv; i++)
         {
@@ -386,7 +377,7 @@ Bool ModbusMaster::getRspPackLen(Uint8* pPackLen)
         break;
     default:
         if(pBuff[1] >= 0x80)
-        { //从机返回异常功能码
+        { /// 从机返回异常功能码
             retVal = TRUE;
             *pPackLen = sizeof(ExceptionRSP)
                     /sizeof(Uint8);
@@ -408,12 +399,12 @@ Bool ModbusMaster::recvRspPackRTU()
     Sint16 rdRetVal = 0;
     static Uint8 recvStep = 1;
     Uint8* buff = recvBuff_.pBuff;
-    Uint16 recvLen = recvBuff_.recvLen;
-    Uint16 hasRecv = recvBuff_.hasRecv;
     static Uint8 packLen = recvBuff_.recvLen;
-    if(recvLen > recvBuff_.buffLen
-    || hasRecv >= recvLen)
+    Uint16 hasRecv = recvBuff_.hasRecv;
+    if(packLen > recvBuff_.buffLen
+    || hasRecv > recvBuff_.buffLen)
     {
+        packLen = recvBuff_.recvLen;
         runInfo_.error = Master_Error3;
         return FALSE;
     }
@@ -425,7 +416,7 @@ Bool ModbusMaster::recvRspPackRTU()
     if(hasRecv < packLen)
     {
         rdRetVal = callBack_.readComDev
-                (buff + hasRecv, recvLen - hasRecv);
+                (buff + hasRecv, packLen - hasRecv);
         recvBuff_.hasRecv +=
         		((rdRetVal > 0) ? rdRetVal : 0);
     }
@@ -442,19 +433,13 @@ Bool ModbusMaster::recvRspPackRTU()
     case 3:
         if(hasRecv >= packLen)
         {
+            packLen = recvBuff_.recvLen;
             recvStep = 1;
             retVal = TRUE;
 #ifdef DEBUG_CODE
 			pSerialPort_->showInCommBrowser(QString("接收内容:"),
-						  QByteArray((char *)this->recvBuff_.pBuff,
-						  this->recvBuff_.hasRecv));
-//			debug("接收内容:");
-//			int i = 0;
-//			for(i = 0; i < this->recvBuff_.recvLen; i++)
-//			{
-//				debug("%d ",this->recvBuff_.pBuff[i]);
-//			}
-//			debug("\n\n\n");
+                          QByteArray((char *)this->recvBuff_.pBuff,
+                          this->recvBuff_.hasRecv));
 #endif
         }
         else break;
@@ -498,7 +483,7 @@ Bool ModbusMaster::handleRspPackRTU()
         return FALSE;
     }
     if(pBuff[1] >= 0x80)
-    { //从机返回异常功能码
+    { /// 从机返回异常功能码
         exceptRspHander(pBuff);
         return FALSE;
     }
@@ -530,14 +515,8 @@ Bool ModbusMaster::handleRspPackRTU()
     {
 #ifdef DEBUG_CODE
         pSerialPort_->showInCommBrowser(QString("解析结果:"),
-                      QByteArray((char *)this->recvBuff_.pDArea, this->recvBuff_.dataLen*2));
-//        debug("解析结果:");
-//        int i = 0;
-//        for(i = 0; i < this->recvBuff_.dataLen; i++)
-//        {
-//            debug("%d ",this->recvBuff_.pDataArea[i]);
-//        }
-//        debug("\n\n\n");
+                      QByteArray((char *)this->recvBuff_.pDArea,
+                      this->recvBuff_.dataLen*2));
 #endif
         this->callBack_.dataHandler(this->recvBuff_.pDArea,
                                     this->recvBuff_.dataLen,
@@ -564,8 +543,7 @@ void ModbusMaster::heartbeatDetect()
     if(heartChkTime_ > 3000)
     {
         heartChkTime_ = 0;
-        this->readDataFromSlave(1, 0x01, 1);//心跳包
-//        this->readDataFromSlave(1, 0x0300C, 1);//心跳包
+        readDataFromSlave(1, 0x01, 1);
     }
 }
 
@@ -576,10 +554,17 @@ void ModbusMaster:: appErrorHandler()
 
 void ModbusMaster::masterErrorHandler()
 {
-    if(this->runInfo_.status == MASTER_ERROR_STATUS
-    || this->runInfo_.error == Master_Error0)
+    if(this->runInfo_.error == Master_Error0)
         return;
     this->runInfo_.errTimes++;
+#ifdef DEBUG_CODE
+    if(this->runInfo_.error != Master_Error0)
+    {
+        pSerialPort_->showInCommBrowser(QString("Error: ")
+                     .append(QString::number(this->runInfo_.error)),
+                      QString(errorToDecrMap_.value(this->runInfo_.error)));
+    }
+#endif
     if(this->runInfo_.error == Master_Error4)
     {
         if(this->reSendCount_++ < this->reSendTimes_)
@@ -590,18 +575,12 @@ void ModbusMaster::masterErrorHandler()
         else
             this->runInfo_.status = MASTER_ERROR_STATUS;
     }
+    else if(this->runInfo_.error == Master_Error2)
+    {
+        this->runInfo_.error = Master_Error0;
+    }
     else
         this->runInfo_.status = MASTER_ERROR_STATUS;
-#ifdef DEBUG_CODE
-    if(this->runInfo_.error != Master_Error0)
-    {
-        pSerialPort_->showInCommBrowser(QString("Error: ")
-                     .append(QString::number(this->runInfo_.error)),
-                      QString(errorToDecrMap_.value(this->runInfo_.error)));
-//        debug("Error: %d", this->runInfo_.error);
-//        debug("\n\n\n");
-    }
-#endif
 }
 
 void ModbusMaster::runModbusMaster()
@@ -639,7 +618,7 @@ void ModbusMaster::runModbusMaster()
     case MASTER_ERROR_STATUS:
         if(this->runInfo_.error != Master_Error0)
             this->appErrorHandler();
-        //清除错误，防止pCommErrorHandler反复调用
+        /// 清除错误，防止pCommErrorHandler反复调用
         this->runInfo_.error = Master_Error0;
         break;
     default:

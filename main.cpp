@@ -6,15 +6,15 @@
 
 SerialPortHelper* pSerialPort1;
 SerialPortHelper* pSerialPort2;
-/****************************此部分的函数由使用者自己实现****************************start*/
-Sint16 serial1Write(Uint8* pBuff, Uint16 len)
+/********************************************************start*/
+Sint16 writeSerial1(Uint8* pBuff, Uint16 len)
 {
-    return pSerialPort1->sendData(pBuff,len);
+    return pSerialPort1->writeSerial(pBuff,len);
 }
 
-Sint16 serial1Read(Uint8* pBuff, Uint16 len)
+Sint16 readSerial1(Uint8* pBuff, Uint16 len)
 {
-    return pSerialPort1->currentSerialPort()->read((char*)pBuff,len);
+    return pSerialPort1->readSerial(pBuff,len);
 }
 
 Uint8 serial1HasData()
@@ -24,22 +24,22 @@ Uint8 serial1HasData()
 
 void dataHandler1(Uint16* pData, Uint16 len, Uint16 descr)
 {
-    pSerialPort1->showInCommBrowser(QString("回调 : void (*dataHandler)(Uint16* pData, Uint16 len, Uint16 descr)"),QString(""));
+    pSerialPort1->showInCommBrowser(QString("void (*dataHandler)(Uint16* pData, Uint16 len, Uint16 descr)"),QString(""));
 }
 
 void errorHandler1(void)
 {
-    pSerialPort1->showInCommBrowser(QString("回调 : void (*errorHandler)(void)"),QString(""));
+    pSerialPort1->showInCommBrowser(QString("void (*errorHandler)(void)"),QString(""));
 }
 
-Sint16 serial2Write(Uint8* pBuff, Uint16 len)
+Sint16 writeSerial2(Uint8* pBuff, Uint16 len)
 {
-    return pSerialPort2->sendData(pBuff,len);
+    return pSerialPort2->writeSerial(pBuff,len);
 }
 
-Sint16 serial2Read(Uint8* pBuff, Uint16 len)
+Sint16 readSerial2(Uint8* pBuff, Uint16 len)
 {
-    return pSerialPort2->currentSerialPort()->read((char*)pBuff,len);
+    return pSerialPort2->readSerial(pBuff,len);
 }
 
 Uint8 serial2HasData()
@@ -49,14 +49,14 @@ Uint8 serial2HasData()
 
 void dataHandler2(Uint16* pData, Uint16 len, Uint16 descr)
 {
-    pSerialPort2->showInCommBrowser(QString("回调 : void (*dataHandler)(Uint16* pData, Uint16 len, Uint16 descr)"),QString(""));
+    pSerialPort2->showInCommBrowser(QString("void (*dataHandler)(Uint16* pData, Uint16 len, Uint16 descr)"),QString(""));
 }
 
 void errorHandler2(void)
 {
-    pSerialPort2->showInCommBrowser(QString("回调 : void (*errorHandler)(void)"),QString(""));
+    pSerialPort2->showInCommBrowser(QString("void (*errorHandler)(void)"),QString(""));
 }
-/****************************此部分的函数由由使用者自己实现******************************end*/
+/**********************************************************end*/
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
@@ -66,12 +66,12 @@ int main(int argc, char *argv[])
     /// @name Modbus主机调试代码
     /// @{
     MasterInitStruct masterInitSt;
-    masterInitSt.commTimeOut = 100;
+    masterInitSt.commTimeOut = 2000;
     masterInitSt.reSendTimes = 10;
     masterInitSt.recvBuffLen = 200;
     masterInitSt.sendBuffLen = 100;
-    masterInitSt.callBack.writeComDev = serial1Write;
-    masterInitSt.callBack.readComDev = serial1Read;
+    masterInitSt.callBack.writeComDev = writeSerial1;
+    masterInitSt.callBack.readComDev = readSerial1;
     masterInitSt.callBack.dataHandler = dataHandler1;
     masterInitSt.callBack.errorHandler = errorHandler1;
     ModbusMaster modbusMaster(masterInitSt);
@@ -84,8 +84,8 @@ int main(int argc, char *argv[])
     slaveInitSt.baudRate = 9600;
     slaveInitSt.sendBuffLen = 200;
     slaveInitSt.recvBuffLen = 200;
-    slaveInitSt.callBack.readComDev = serial2Read;
-    slaveInitSt.callBack.writeComDev = serial2Write;
+    slaveInitSt.callBack.readComDev = readSerial2;
+    slaveInitSt.callBack.writeComDev = writeSerial2;
     slaveInitSt.callBack.hasDataInComDev = serial2HasData;
     ModbusSlave modbusSlave(slaveInitSt);
     modbusSlave.setSerialPort(pSerialPort2);
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
     MainWindow w1;
     w1.setModbusMaster(&modbusMaster);
     w1.setModbusSlave(&modbusSlave);
-    w1.setWindowTitle("Master Debuger Helper");
+    w1.setWindowTitle("Master Debuger");
     w1.show();
 #endif
     return a.exec();

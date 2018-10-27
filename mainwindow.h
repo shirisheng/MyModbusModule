@@ -13,6 +13,11 @@ class MainWindow;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+    enum CommandSet
+    {
+        CommandSet_Read = 0x00,
+        CommandSet_Write = 0x01,
+    };
 
 public:
     explicit MainWindow(QWidget *parent = 0);
@@ -42,10 +47,10 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
-    bool cmdSelect_;
-    bool sendMode_;
-    bool startSendCmd_;
-    int  continueSendAddr_;
+    bool isStartSend_;
+    bool isSendContinue_;
+    int currentCmd_;
+    int continueSendAddr_;
     QTimer sendCmdTimer_;
     QTimer modbusRunningTimer_;
     QTimer packBuffInfoTimer_;

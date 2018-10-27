@@ -15,7 +15,7 @@
 
 /// @name Master Error
 /// @{
-enum MASTER_ERROR
+enum MasterError
 {
     Master_Error0 = 0,
     Master_Error1,      ///< 初始化失败
@@ -24,7 +24,7 @@ enum MASTER_ERROR
     Master_Error4,      ///< CRC校验错误
     Master_Error5,      ///< 从机返回异常响应帧
     Master_Error6,      ///< 通信接收超时
-    Master_Error7,      ///< 获取当前数据包失败
+    Master_Error7,      ///< 临时缓冲区空间不足
 };
 /// @} End of Master Error
 
@@ -67,8 +67,8 @@ typedef struct
 
 typedef struct
 {
-    Uint16* pTimeCounter;   ///< 定时计数器
-    Uint16  countCyclTime;   ///< 计数周期ms
+    Uint16* pTimeCounter;    ///< 定时计数器
+    double  countCyclTime;   ///< 计数周期ms
 } MasterBaseTimer;
 
 typedef struct
@@ -82,8 +82,8 @@ typedef struct
 typedef struct
 {
     Uint16* pTimeCounter;  ///< 定时计数器
-    Uint16  countCyclTime; ///< 计数周期ms
-    Uint16  commTimeOut;   ///< 通信超时时间ms
+    double  countCyclTime; ///< 计数周期ms
+    double  commTimeOut;   ///< 通信超时时间ms
     Uint16  reSendTimes;   ///< 故障重发次数
     Uint16  recvBuffLen;   ///< 接收缓冲区长度
     Uint16  sendBuffLen;   ///< 发送缓冲区长度
@@ -152,9 +152,11 @@ private:
 
 private:
     Bool  isInitOK_;       ///< 初始化成功
-    Uint16 heartChkTime_;  ///< 心跳检测计时
-    Uint16 currRecvTime_;  ///< 当前接收耗时
-    Uint16 commTimeOut_;   ///< 通信超时时间ms
+    double heartChkTime_;  ///< 心跳检测计时
+    double currRecvTime_;  ///< 当前接收耗时
+    /// @brief 通信超时间 = 从机响应时间
+    ///      + 响应包传输时间 + 余量时间
+    double commTimeOut_;   ///< 通信超时时间ms
     Uint16 reSendTimes_;   ///< 故障重发次数
     Uint16 reSendCount_;   ///< 故障重发计数
     MasterBaseTimer baseTimer_;
@@ -173,7 +175,7 @@ private:
 /// @brief 华成液压伺服控制类.
 class HC_HydServoCtrl
 {
-    enum REDA_ITEM_DECR
+    enum ReadItemDecr
     {
         R_PressFVal   = 0x3000,
         R_PressGVal   = 0x3001,
@@ -193,7 +195,7 @@ class HC_HydServoCtrl
         R_ReLoadRate  = 0x3010,
     };
 
-    enum WRITE_ITEM_DECR
+    enum WriteItemDecr
     {
         W_PressGVal   = 0x2C0A,
         W_FlowGVal    = 0x2C0B,

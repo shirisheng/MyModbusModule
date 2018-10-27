@@ -16,7 +16,16 @@ class SerialPortHelper;
 class SerialPortHelper : public QFrame
 {
     Q_OBJECT
-
+    enum ShowFormat
+    {
+        ShowFormat_Text = 0x00,
+        ShowFormat_RowData = 0x01,
+    };
+    enum InputFormat
+    {
+        InputFormat_Text = 0x00,
+        InputFormat_Hex = 0x01,
+    };
 public:
     explicit SerialPortHelper(QWidget *parent = 0);
     ~SerialPortHelper();
@@ -28,21 +37,18 @@ public:
         }
         return pSerialPortHelper_;
     }
-    void showInCommBrowser(QString descr, QString strToShow);
-    void showInCommBrowser(QString descr, QByteArray dataToShow);
+    void sendAll(const QByteArray &data);
+    qint64 readSerial(quint8* pBuff, quint16 len);
+    qint64 writeSerial(quint8* pBuff, quint16 len);
+    void showInCommBrowser(QString descr, QString content);
+    void showInCommBrowser(QString descr, QByteArray content);
     QSerialPort * currentSerialPort(){return &currentSerialPort_;}
 
-signals:
-    void recvFinishSignal(Uint8* pRecvBuff, Uint16 buffLen);
-
-public slots:
-//    void recvData();
-    qint64 sendData(const QByteArray &data);
-    qint64 sendData(quint8* pPackBuff, quint16 packLen);
-
 private slots:
-//    void recvFinish();
-    void sendContinue(qint64 writtenBytes);
+    void onReadyRead();
+    void onReadFinish();
+    void onBytesWritten(qint64 bytes);
+    void onSerialError(QSerialPort::SerialPortError error);
 
 private slots:
     void on_refreshSerialButton_clicked();
@@ -57,20 +63,23 @@ private slots:
 
     void on_clearScreenButton_clicked();
 
-    void on_showModeButton_clicked();
-
     void on_stopScrollButton_clicked();
+
+    void on_showFormatComboBox_currentIndexChanged(int index);
+
+    void on_inputFormatComboBox_currentIndexChanged(int index);
 
 private:
     Ui::SerialPortHelper *ui;
-    QTimer timer_;
-    bool showMode_;
-    bool stopScroll_;
-    QByteArray recvBuff_;
-    QByteArray sendBuff_;
+    static SerialPortHelper* pSerialPortHelper_;
     QList<QSerialPortInfo> availablePorts_;
     QSerialPort currentSerialPort_;
-    static SerialPortHelper* pSerialPortHelper_;
+    int showFormat_;
+    int inputFormat_;
+    bool isScroll_;
+    QTimer readFinishTimer_;
+    QByteArray recvBuff_;
+    QByteArray sendBuff_;
 };
 
 #endif // SERIALPORTHELPER_H

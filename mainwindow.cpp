@@ -8,16 +8,20 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    cmdSelect_ = false;
-    sendMode_ = false;
-    startSendCmd_ = false;
+    isStartSend_ = false;
+    isSendContinue_ = false;
+    currentCmd_ = 0;
     continueSendAddr_ = 0;
     pModbusMaster_ = NULL;
     pModbusSlave_ = NULL;
     this->setWindowTitle("Modbus Debuger");
-    QObject::connect(&sendCmdTimer_, SIGNAL(timeout()), this, SLOT(onSendCmd()));
-    QObject::connect(&modbusRunningTimer_, SIGNAL(timeout()), this, SLOT(runningModbus()));
-    QObject::connect(&packBuffInfoTimer_, SIGNAL(timeout()), this, SLOT(refreshPackBuffInfo()));
+    ui->endAddrLineEdit->setEnabled(isSendContinue_);
+    QObject::connect(&sendCmdTimer_,
+                     SIGNAL(timeout()), this, SLOT(onSendCmd()));
+    QObject::connect(&modbusRunningTimer_,
+                     SIGNAL(timeout()), this, SLOT(runningModbus()));
+    QObject::connect(&packBuffInfoTimer_,
+                     SIGNAL(timeout()), this, SLOT(refreshPackBuffInfo()));
     modbusRunningTimer_.start(0);
     packBuffInfoTimer_.start(5);
 }
@@ -55,8 +59,8 @@ void MainWindow::on_clearErrorButton_clicked()
 
 void MainWindow::on_startSendButton_clicked()
 {
-    startSendCmd_ = !startSendCmd_;
-    if(startSendCmd_)
+    isStartSend_ = !isStartSend_;
+    if(isStartSend_)
     {
         ui->startSendButton->setText("Stop Send");
         sendCmdTimer_.start(ui->execCmdIntervalLineEdit->text().toInt());
@@ -70,26 +74,30 @@ void MainWindow::on_startSendButton_clicked()
 
 void MainWindow::onSendCmd()
 {
-    bool convertOk;
-    if(startSendCmd_)
+    if(isStartSend_)
     {
-        if(!cmdSelect_)
+        bool convertOk;
+        if(currentCmd_ == CommandSet_Read)
         {
-            pModbusMaster_->readDataFromSlave(ui->readSlaveIDLineEdit->text().toInt(),
-                              !sendMode_ ? ui->readStartAddrLineEdit->text().toInt(&convertOk,16) : continueSendAddr_,
-                              ui->readDataNumLineEdit->text().toInt());
-            continueSendAddr_ < ui->endAddrLineEdit->text().toInt(&convertOk,16) ?
-                        continueSendAddr_++ : continueSendAddr_ = ui->readStartAddrLineEdit->text().toInt(&convertOk,16);
+            Uint8 slaveID = ui->readSlaveIDLineEdit->text().toInt();
+            Uint16 editAddr = ui->readStartAddrLineEdit->text().toInt(&convertOk,10);
+            Uint16 dataNum = ui->readDataNumLineEdit->text().toInt();
+            Uint16 endAddr = ui->endAddrLineEdit->text().toInt(&convertOk,10);
+            Uint16 startAddr = isSendContinue_ ? continueSendAddr_ : editAddr;
+            pModbusMaster_->readDataFromSlave(slaveID, startAddr, dataNum);
+            continueSendAddr_ < endAddr ? (continueSendAddr_ += dataNum)  : continueSendAddr_ = editAddr;
         }
-        else
+        else if(currentCmd_ == CommandSet_Write)
         {
-            pModbusMaster_->writeDataToSlave(ui->writeSlaveIDLineEdit->text().toInt(),
-                             !sendMode_ ? ui->writeAddrLineEdit->text().toInt(&convertOk,16) : continueSendAddr_,
-                             ui->writeValueLineEdit->text().toInt());
-            continueSendAddr_ < ui->endAddrLineEdit->text().toInt(&convertOk,16) ?
-                        continueSendAddr_++ : continueSendAddr_ = ui->writeAddrLineEdit->text().toInt(&convertOk,16);
+            Uint8 slaveID = ui->writeSlaveIDLineEdit->text().toInt();
+            Uint16 editAddr = ui->writeAddrLineEdit->text().toInt(&convertOk,10);
+            Uint16 value = ui->writeValueLineEdit->text().toInt();
+            Uint16 endAddr = ui->endAddrLineEdit->text().toInt(&convertOk,10);
+            Uint16 currAddr = isSendContinue_ ? continueSendAddr_ : editAddr;
+            pModbusMaster_->writeDataToSlave(slaveID, currAddr, value);
+            continueSendAddr_ < endAddr ? continueSendAddr_++ : continueSendAddr_ = editAddr;
         }
-        if(!sendMode_) ui->startSendButton->click();
+        if(!isSendContinue_) ui->startSendButton->click();
     }
 }
 
@@ -101,7 +109,7 @@ void MainWindow::on_runningIntervalLineEdit_textChanged(const QString &arg1)
 
 void MainWindow::on_cmdSelectComboBox_currentIndexChanged(int index)
 {
-    cmdSelect_ = !cmdSelect_;
+    currentCmd_ = index;
 }
 
 void MainWindow::on_execCmdIntervalLineEdit_textChanged(const QString &arg1)
@@ -112,8 +120,10 @@ void MainWindow::on_execCmdIntervalLineEdit_textChanged(const QString &arg1)
 
 void MainWindow::on_sendModeComboBox_currentIndexChanged(int index)
 {
-    sendMode_ = !sendMode_;
-    if(!cmdSelect_)
-    continueSendAddr_ = ui->readStartAddrLineEdit->text().toInt();
-    else continueSendAddr_ = ui->writeAddrLineEdit->text().toInt();
+    isSendContinue_ = !isSendContinue_;
+    if(currentCmd_ == CommandSet_Read)
+        continueSendAddr_ = ui->readStartAddrLineEdit->text().toInt();
+    else if(currentCmd_ == CommandSet_Write)
+        continueSendAddr_ = ui->writeAddrLineEdit->text().toInt();
+    ui->endAddrLineEdit->setEnabled(isSendContinue_);
 }

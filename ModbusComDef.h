@@ -47,8 +47,8 @@ typedef uint32_t         Uint32;
 
 /// @name Modbus Except Code
 /// @{
-enum EXCEPT_CODE
-{ //从机返回异常响应帧中数据区对应的错误代码
+enum ExceptCode
+{ /// 从机返回异常响应帧中数据区对应的错误代码
     Except_Code0 = 0,
     Except_Code1,
     Except_Code2,
@@ -59,24 +59,24 @@ enum EXCEPT_CODE
     Except_Code7,
     Except_Code8,
 };
-// 异常响应帧数据区错误代码说明:
-// 代码         名称                     含义
-// 01      不合法功能代码    从机接收的是一种不能执行功能代码。
-//						   发出查询命令后，该代码指示无程序功能。
-// 02      不合法数据地址    接收的数据地址，是从机不允许的地址。
-// 03      不合法数据        查询数据区的值是从机不允许的值。
-// 04      从机设备故障      从机执行主机请求的动作时出现不可恢复的错误。
-// 05      确认             从机已接收请求处理数据，但需要较长 的处理时
-//						   间，为避免主机出现超时错误而发送该确认响应。
-//						   主机以此再发送一个“查询程序完成”未决定从机
-//						   是否已完成处理。
-// 06      从机设备忙碌      从机正忙于处理一个长时程序命令，请求主机在
-//						    从机空闲时发送信息。
-// 07      否定             从机不能执行查询要求的程序功能时，该代码使用
-//						   十进制 13 或 14 代码，向主机返回一个“不成功的
-//						   编程请求”信息。主机应请求诊断从机的错误信息。
-// 08      内存奇偶校验错误   从机读扩展内存中的数据时，发现有奇偶校验错误，
-//						   主机按从机的要求重新发送数据请求
+/// 异常响应帧数据区错误代码说明:
+/// 代码         名称                     含义
+/// 01      不合法功能代码    从机接收的是一种不能执行功能代码。
+///						    发出查询命令后，该代码指示无程序功能。
+/// 02      不合法数据地址    接收的数据地址，是从机不允许的地址。
+/// 03      不合法数据       查询数据区的值是从机不允许的值。
+/// 04      从机设备故障     从机执行主机请求的动作时出现不可恢复的错误。
+/// 05      确认            从机已接收请求处理数据，但需要较长 的处理时
+///						    间，为避免主机出现超时错误而发送该确认响应。
+///						    主机以此再发送一个“查询程序完成”未决定从机
+///						    是否已完成处理。
+/// 06      从机设备忙碌     从机正忙于处理一个长时程序命令，请求主机在
+///						    从机空闲时发送信息。
+/// 07      否定            从机不能执行查询要求的程序功能时，该代码使用
+///						    十进制 13 或 14 代码，向主机返回一个“不成功的
+///						    编程请求”信息。主机应请求诊断从机的错误信息。
+/// 08      内存奇偶校验错误  从机读扩展内存中的数据时，发现有奇偶校验错误，
+///						    主机按从机的要求重新发送数据请求
 /// @} End of Modbus Except Code
 
 
@@ -131,7 +131,7 @@ typedef struct _WriteMulRegCMD_X10_
     Uint8 regNumH;
     Uint8 regNumL;
     Uint8 dataLen;
-    /// @brief 此数组具体长度要视数据长度而定
+/// @brief 此数组具体长度要视数据长度而定
     Uint8 data[5];
 #elif (TRF_ORDER == 1)
     Uint8 startRegL;
@@ -139,7 +139,7 @@ typedef struct _WriteMulRegCMD_X10_
     Uint8 regNumL;
     Uint8 regNumH;
     Uint8 dataLen;
-    /// @brief 此数组具体长度要视数据长度而定
+/// @brief 此数组具体长度要视数据长度而定
     Uint8 data[5];
 #endif
     Uint8 crcL;
@@ -155,12 +155,12 @@ typedef struct _ReadMulRegRSP_X03_
     Uint8 funCode;
 #if   (TRF_ORDER == 0)
     Uint8 dataLen;
-    /// @brief 此数组具体长度要视数据长度而定
+/// @brief 此数组具体长度要视数据长度而定
     Uint8 data[5];
 #elif (TRF_ORDER == 1)
     Uint8 dataLenL;
     Uint8 dataLenH;
-    /// @brief 此数组具体长度要视数据长度而定
+/// @brief 此数组具体长度要视数据长度而定
     Uint8 data[5];
 #endif
     Uint8 crcL;
@@ -196,7 +196,7 @@ typedef struct _WriteMulRegRSP_X10_
     Uint8 regNumH;
     Uint8 regNumL;
     Uint8 dataLen;
-    /// @brief 此数组具体长度要视数据长度而定
+/// @brief 此数组具体长度要视数据长度而定
     Uint8 data[5];
 #elif (TRF_ORDER == 1)
     Uint8 startRegL;
@@ -204,7 +204,7 @@ typedef struct _WriteMulRegRSP_X10_
     Uint8 regNumL;
     Uint8 regNumH;
     Uint8 dataLen;
-    /// @brief 此数组具体长度要视数据长度而定
+/// @brief 此数组具体长度要视数据长度而定
     Uint8 data[5];
 #endif
     Uint8 crcL;
@@ -214,8 +214,10 @@ typedef struct _WriteMulRegRSP_X10_
 typedef struct _ExceptionRSP_
 {
     Uint8 slaveID;
-    Uint8 funCode; ///< 异常功能码（其值为由当前功能码最高位置1所得）
-    Uint8 except;  ///< 异常类型码
+/// @brief 异常功能码（其值为由当前功能码最高位置1所得）
+    Uint8 funCode;
+/// @brief 异常类型码
+    Uint8 except;
     Uint8 crcL;
     Uint8 crcH;
 } ExceptionRSP;
