@@ -76,7 +76,8 @@ typedef struct
     Uint8  status;
     Uint8  exceptCode; ///< 从机返回的错误码
     Uint8  error;      ///< 错误类型
-    Uint16 errTimes;   ///< 错误次数
+    Uint32 sendTimes;  ///< 发送次数
+    Uint32 errTimes;   ///< 错误次数
 } MasterRunInfo;
 
 typedef struct
@@ -114,7 +115,8 @@ public:
     Uint16 hasSendLen() { return sendBuff_.hasSend;}
     void setHasRecvLen(Uint16 len) { recvBuff_.hasRecv = len;}
     void setHasSendLen(Uint16 len) { sendBuff_.hasSend = len;}
-    Uint16 errorTimes() {return runInfo_.errTimes;}
+    Uint32 sendTimes() {return runInfo_.sendTimes;}
+    Uint32 errorTimes() {return runInfo_.errTimes;}
 #ifdef DEBUG_CODE
     Uint16 sendBuffSize(){return sendBuff_.buffLen;}
     Uint16 sendBuffFront(){return sendBuff_.front;}

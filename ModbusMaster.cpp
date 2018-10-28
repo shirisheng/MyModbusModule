@@ -14,6 +14,7 @@ ModbusMaster::ModbusMaster(MasterInitStruct initStruct):
     this->runInfo_.status = MASTER_IDLE_STATUS;
     this->runInfo_.exceptCode = Except_Code0;
     this->runInfo_.error = Master_Error0;
+    this->runInfo_.sendTimes = 0;
     this->runInfo_.errTimes = 0;
     this->sendBuff_.hasSend = 0;
     this->sendBuff_.front = 0;
@@ -306,7 +307,10 @@ Bool ModbusMaster::sendCurrCmdPackRTU()
     else
     { /// 发送完成
         retVal = TRUE;
+        this->runInfo_.sendTimes++;
 #ifdef DEBUG_CODE
+        pSerialPort_->showInCommBrowser(QString("Send Times: "),
+                      QString::number(this->runInfo_.sendTimes));
         pSerialPort_->showInCommBrowser(QString("Error Times: "),
                       QString::number(this->runInfo_.errTimes));
         pSerialPort_->showInCommBrowser(QString("发送内容:"),
