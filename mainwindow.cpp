@@ -76,26 +76,35 @@ void MainWindow::onSendCmd()
 {
     if(isStartSend_)
     {
-        bool convertOk;
+        bool convertOk1 = false;
+        bool convertOk2 = false;
+        bool convertOk3 = false;
+        bool convertOk4 = false;
         if(currentCmd_ == CommandSet_Read)
         {
-            Uint8 slaveID = ui->readSlaveIDLineEdit->text().toInt();
-            Uint16 editAddr = ui->readStartAddrLineEdit->text().toInt(&convertOk,10);
-            Uint16 dataNum = ui->readDataNumLineEdit->text().toInt();
-            Uint16 endAddr = ui->endAddrLineEdit->text().toInt(&convertOk,10);
+            Uint8 slaveID = ui->readSlaveIDLineEdit->text().toInt(&convertOk1,10);
+            Uint16 editAddr = ui->readStartAddrLineEdit->text().toInt(&convertOk2,10);
+            Uint16 dataNum = ui->readDataNumLineEdit->text().toInt(&convertOk3,10);
+            Uint16 endAddr = ui->endAddrLineEdit->text().toInt(&convertOk4,10);
             Uint16 startAddr = isSendContinue_ ? continueSendAddr_ : editAddr;
-            pModbusMaster_->readDataFromSlave(slaveID, startAddr, dataNum);
-            continueSendAddr_ < endAddr ? (continueSendAddr_ += dataNum)  : continueSendAddr_ = editAddr;
+            if(convertOk1 && convertOk2 && convertOk3 && convertOk4)
+            {
+                pModbusMaster_->readDataFromSlave(slaveID, startAddr, dataNum);
+                continueSendAddr_ < endAddr ? (continueSendAddr_ += dataNum)  : continueSendAddr_ = editAddr;
+            }
         }
         else if(currentCmd_ == CommandSet_Write)
         {
-            Uint8 slaveID = ui->writeSlaveIDLineEdit->text().toInt();
-            Uint16 editAddr = ui->writeAddrLineEdit->text().toInt(&convertOk,10);
-            Uint16 value = ui->writeValueLineEdit->text().toInt();
-            Uint16 endAddr = ui->endAddrLineEdit->text().toInt(&convertOk,10);
+            Uint8 slaveID = ui->writeSlaveIDLineEdit->text().toInt(&convertOk1,10);
+            Uint16 editAddr = ui->writeAddrLineEdit->text().toInt(&convertOk2,10);
+            Uint16 value = ui->writeValueLineEdit->text().toInt(&convertOk3,10);
+            Uint16 endAddr = ui->endAddrLineEdit->text().toInt(&convertOk4,10);
             Uint16 currAddr = isSendContinue_ ? continueSendAddr_ : editAddr;
-            pModbusMaster_->writeDataToSlave(slaveID, currAddr, value);
-            continueSendAddr_ < endAddr ? continueSendAddr_++ : continueSendAddr_ = editAddr;
+            if(convertOk1 && convertOk2 && convertOk3 && convertOk4)
+            {
+                pModbusMaster_->writeDataToSlave(slaveID, currAddr, value);
+                continueSendAddr_ < endAddr ? continueSendAddr_++ : continueSendAddr_ = editAddr;
+            }
         }
         if(!isSendContinue_) ui->startSendButton->click();
     }
