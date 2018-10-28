@@ -442,7 +442,7 @@ Bool ModbusMaster::recvRspPackRTU()
                           this->recvBuff_.hasRecv));
 #endif
         }
-        else break;
+        break;
     default: recvStep = 1;
     break;
     }
@@ -597,20 +597,21 @@ void ModbusMaster::runModbusMaster()
         	this->prepareForSend();
             this->runInfo_.status = MASTER_SEND_STATUS;
         }
-        else
+        else{
             this->heartbeatDetect();
-        break;
+            break;
+        }
     case MASTER_SEND_STATUS:
         if(this->sendCurrCmdPackRTU())
         {
         	this->prepareForRecv();
             this->runInfo_.status = MASTER_RECV_STATUS;
         }
-        break;
+        else break;
     case MASTER_RECV_STATUS:
         if(this->recvRspPackRTU())
             this->runInfo_.status = MASTER_RECV_FINISH;
-        break;
+        else break;
     case MASTER_RECV_FINISH:
         if(this->handleRspPackRTU())
             this->clearMasterError();

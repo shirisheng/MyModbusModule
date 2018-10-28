@@ -422,22 +422,22 @@ void ModbusSlave::runModbusSlave()
         	this->prepareForRecv();
             runInfo_.status = SLAVE_RECV_STATUS;
         }
-        break;
+        else break;
     case SLAVE_RECV_STATUS:
         if(this->recvCmdPackRTU())
             runInfo_.status = SLAVE_RECV_FINISH;
-        break;
+        else break;
     case SLAVE_RECV_FINISH:
         if(this->masterCmdPackHandle())
         {
         	this->prepareForSend();
             runInfo_.status = SLAVE_RSPD_STATUS;
         }
-        break;
+        else break;
     case SLAVE_RSPD_STATUS:
         if(this->sendRspPackRTU())
             runInfo_.status = SLAVE_RSPD_FINISH;
-        break;
+        else break;
     case SLAVE_RSPD_FINISH:
         runInfo_.status = SLAVE_IDLE_STATUS;
         break;
