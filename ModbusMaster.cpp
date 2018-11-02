@@ -15,6 +15,7 @@ ModbusMaster::ModbusMaster(MasterInitStruct initStruct):
     this->runInfo_.exceptCode = Except_Code0;
     this->runInfo_.error = Master_Error0;
     this->runInfo_.sendTimes = 0;
+    this->runInfo_.recvTimes = 0;
     this->runInfo_.errTimes = 0;
     this->sendBuff_.hasSend = 0;
     this->sendBuff_.front = 0;
@@ -311,6 +312,8 @@ Bool ModbusMaster::sendCurrCmdPackRTU()
 #ifdef DEBUG_CODE
         pSerialPort_->showInCommBrowser(QString("Send Times: "),
                       QString::number(this->runInfo_.sendTimes));
+        pSerialPort_->showInCommBrowser(QString("recv Times: "),
+                      QString::number(this->runInfo_.recvTimes));
         pSerialPort_->showInCommBrowser(QString("Error Times: "),
                       QString::number(this->runInfo_.errTimes));
         pSerialPort_->showInCommBrowser(QString("发送内容:"),
@@ -437,6 +440,7 @@ Bool ModbusMaster::recvRspPackRTU()
     case 3:
         if(hasRecv >= packLen)
         {
+            this->runInfo_.recvTimes++;
             packLen = recvBuff_.recvLen;
             recvStep = 1;
             retVal = TRUE;

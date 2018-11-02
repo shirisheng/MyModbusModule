@@ -77,6 +77,7 @@ typedef struct
     Uint8  exceptCode; ///< 从机返回的错误码
     Uint8  error;      ///< 错误类型
     Uint32 sendTimes;  ///< 发送次数
+    Uint32 recvTimes;  ///< 接收次数
     Uint32 errTimes;   ///< 错误次数
 } MasterRunInfo;
 
